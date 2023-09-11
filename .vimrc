@@ -13,7 +13,7 @@ let NERDTreeShowHidden=1
 nnoremap <leader>h :noh<CR>
 nnoremap <C-t> :NERDTreeToggle<CR>
 nnoremap <C-p> :Files<CR>
-nnoremap <leader>y :%yank | call system('echo "'.@*.'" | xclip -selection clipboard')
+"nnoremap <leader>y :%yank | call system('echo "'.@*.'" | xclip -selection clipboard')
 map <F3> <ESC>:exec &mouse!=""? "set mouse=" : "set mouse=a"<CR>
 cmap w!! %!sudo tee > /dev/null %
 inoremap <C-[> <Esc>
