@@ -85,7 +85,6 @@ _open_files_for_editing() {
 # alias pacdiff=eos-pacdiff
 ################################################################################
 
-
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 #======== FUNCTION ============#
 otw() {
@@ -140,9 +139,10 @@ alias pn='eval "$(/home/kayd/cp/utils/mcf pn vim)"'
 #wmctrl -r qterminal -b add,fullscreen
 #wmctrl -i -r $(wmctrl -lx | grep gnome-terminal | cut -d' ' -f1) -b add,fullscreen
 
-# open tmux
-[[ $TERM_PROGRAM != "vscode" && -z $TMUX ]] && (tmat)
-
-
 # Created by `pipx` on 2023-09-09 09:34:12
 export PATH="$PATH:/home/kayd/.local/bin"
+
+startx 2>/dev/null
+
+# open tmux
+[[ $TERM_PROGRAM != "vscode" && -z $TMUX ]] && (tmat)
