@@ -1,8 +1,12 @@
 #!/usr/bin/bash
 sudo pacman -S ttf-font-awesome
-#sudo pacman -S noto-fonts-emoji
-#sudo pacman -S mpv
-#sudo pacman -S yt-dlp
+#sudo pacman -S --noconfirm noto-fonts-emoji
+#sudo pacman -S --noconfirm mpv
+#sudo pacman -S --noconfirm yt-dlp
+sudo pacman -S --noconfirm vim
+sudo pacman -S --noconfirm tmux
+sudo pacman -S --noconfirm dmenu
+sudo pacman -S --noconfirm xclip
 yay -S --noconfirm visual-studio-code-bin
 yay -S --noconfirm microsoft-edge-stable-bin
 
