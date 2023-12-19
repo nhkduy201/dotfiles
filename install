@@ -1,12 +1,18 @@
-#!/usr/bin/bash
-sudo pacman -S ttf-font-awesome
-#sudo pacman -S --noconfirm noto-fonts-emoji
-#sudo pacman -S --noconfirm mpv
-#sudo pacman -S --noconfirm yt-dlp
-sudo pacman -S --noconfirm vim
-sudo pacman -S --noconfirm tmux
-sudo pacman -S --noconfirm dmenu
-sudo pacman -S --noconfirm xclip
-yay -S --noconfirm visual-studio-code-bin
-yay -S --noconfirm microsoft-edge-stable-bin
+#!/bin/bash
+#noto-fonts-emoji
+#mpv
+#yt-dlp
+pacman_packages=("ttf-font-awesome" "vim" "tmux" "dmenu" "xclip")
+yay_packages=("visual-studio-code-bin" "microsoft-edge-stable-bin")
+sudo pacman -Rc - < xfce4
 
+sudo pacman -S --noconfirm "${pacman_packages[@]}"
+yay -S "${yay_packages[@]}"
+
+softwares=("dwm" "st" "slstatus")
+
+for sw in $softwares; do
+  git clone "http://git.suckless.org/${sw}"
+  cp ${sw}-config.h ${sw}/config.h
+  sudo -C ${sw} make clean install
+done
