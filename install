@@ -4,15 +4,18 @@
 #yt-dlp
 pacman_packages=("ttf-font-awesome" "vim" "tmux" "dmenu" "xclip")
 yay_packages=("visual-studio-code-bin" "microsoft-edge-stable-bin")
-sudo pacman -Rc - < xfce4
+sudo pacman --noconfirm -Rc - < ./xfce4
 
 sudo pacman -S --noconfirm "${pacman_packages[@]}"
-yay -S "${yay_packages[@]}"
+yay -S --noconfirm "${yay_packages[@]}"
 
 softwares=("dwm" "st" "slstatus")
 
-for sw in $softwares; do
+for sw in "${softwares[@]}"; do
   git clone "http://git.suckless.org/${sw}"
   cp ${sw}-config.h ${sw}/config.h
-  sudo -C ${sw} make clean install
+  sudo make -C ${sw} clean install
 done
+
+find . -type f -name .\* ! -name .bashrc -exec cp {} ~/ \;
+cat .bashrc >> ~/.bashrc
