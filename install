@@ -3,11 +3,14 @@
 #mpv
 #yt-dlp
 pacman_packages=("ttf-font-awesome" "vim" "tmux" "dmenu" "xclip")
-yay_packages=("visual-studio-code-bin" "microsoft-edge-stable-bin")
-sudo pacman --noconfirm -Rc - < ./xfce4
+yay_packages=("visual-studio-code-bin" "microsoft-edge-stable-bin", "ibus-bamboo")
+#sudo pacman --noconfirm -Rc - < ./xfce4
+
 
 sudo pacman -S --noconfirm "${pacman_packages[@]}"
 yay -S --noconfirm "${yay_packages[@]}"
+
+env DCONF_PROFILE=ibus dconf write /desktop/ibus/general/preload-engines "['xkb:us::eng', 'Bamboo']" && gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'us'), ('ibus', 'Bamboo')]"
 
 softwares=("dwm" "st" "slstatus")
 

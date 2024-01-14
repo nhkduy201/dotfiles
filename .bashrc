@@ -53,6 +53,12 @@ alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
 #wmctrl -r qterminal -b add,fullscreen
 #wmctrl -i -r $(wmctrl -lx | grep gnome-terminal | cut -d' ' -f1) -b add,fullscreen
 
+export GTK_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+export QT_IM_MODULE=ibus
+
+ibus-daemon -drx
+
 # Created by `pipx` on 2023-09-09 09:34:12
 export PATH="$PATH:/home/kayd/.local/bin"
 
