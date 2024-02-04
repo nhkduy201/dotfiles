@@ -44,6 +44,9 @@ cal_mem() {
 save_dotfiles() {
   [[ -f ~/config/.bashrc ]] && awk '/# === MYCONFIG === #/,0' ~/.bashrc > ~/config/.bashrc
 }
+copy_file_clipboard() {
+  xclip -sel clip -i $1
+}
 
 # ALIAS
 alias tmat='tmux attach || tmux'
@@ -58,15 +61,12 @@ alias ll='ls -alF'
 #wmctrl -r qterminal -b add,fullscreen
 #wmctrl -i -r $(wmctrl -lx | grep gnome-terminal | cut -d' ' -f1) -b add,fullscreen
 
-export GTK_IM_MODULE=ibus
-export XMODIFIERS=@im=ibus
-export QT_IM_MODULE=ibus
-ibus-daemon -drx
-
 # Created by `pipx` on 2023-09-09 09:34:12
 export PATH="$PATH:/home/kayd/.local/bin"
 
-startx 2>/dev/null
+if ! pgrep -x "Xorg" > /dev/null; then
+  startx
+fi
 
 # open tmux
 if [[ $TERM_PROGRAM != "vscode" ]]; then
