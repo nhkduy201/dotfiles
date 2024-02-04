@@ -1,0 +1,2 @@
+ACTION=="add", KERNEL=="mouse*", ENV{.INPUT_CLASS}=="mouse", RUN+="/bin/sh -c 'DISPLAY=:0 /usr/local/bin/kayd_toggle_touchpad disable'"
+ACTION=="remove", KERNEL=="mouse*", ENV{.INPUT_CLASS}=="mouse", RUN+="/bin/sh -c 'DISPLAY=:0 /usr/local/bin/kayd_toggle_touchpad enable'"

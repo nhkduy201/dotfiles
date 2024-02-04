@@ -1,0 +1,8 @@
+#!/bin/bash
+TOUCHPAD_ID=$(xinput list | grep Touchpad | awk -F'id=' '{print $2}' | awk '{print $1}')
+if [ "$1" == "disable" ]; then
+    xinput --disable "$TOUCHPAD_ID"
+elif [ "$1" == "enable" ]; then
+    xinput --enable "$TOUCHPAD_ID"
+fi
+

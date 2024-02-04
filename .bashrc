@@ -1,5 +1,6 @@
+# === MYCONFIG === #
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
-#======== FUNCTION ============#
+# FUNCTION
 otw() {
   file_path="/root/otwpass"
   line_threshold="$1"
@@ -40,12 +41,16 @@ cal_mem() {
             printf "%.2f GB\n", sum / (1024 * 1024)
     }'
 }
+save_dotfiles() {
+  [[ -f ~/config/.bashrc ]] && awk '/# === MYCONFIG === #/,0' ~/.bashrc > ~/config/.bashrc
+}
 
-#======== ALIAS ============#
+# ALIAS
 alias tmat='tmux attach || tmux'
 alias vi='vim'
 alias pn='eval "$(/home/kayd/cp/utils/mcf pn vim)"'
 alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
+alias ll='ls -alF'
 
 #sleep 0.1
 #wmctrl -i -r $(wmctrl -lx | grep xfce4-terminal | cut -d' ' -f1) -b add,fullscreen
@@ -56,7 +61,6 @@ alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
 export QT_IM_MODULE=ibus
-
 ibus-daemon -drx
 
 # Created by `pipx` on 2023-09-09 09:34:12
@@ -65,4 +69,8 @@ export PATH="$PATH:/home/kayd/.local/bin"
 startx 2>/dev/null
 
 # open tmux
-[[ $TERM_PROGRAM != "vscode" && -z $TMUX ]] && (tmat)
+if [[ $TERM_PROGRAM != "vscode" ]]; then
+  if [[ -z $TMUX ]]; then
+    tmat
+  fi
+fi

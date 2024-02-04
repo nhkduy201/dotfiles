@@ -1,24 +1,79 @@
 #!/bin/bash
-#noto-fonts-emoji
-#mpv
-#yt-dlp
-pacman_packages=("ttf-font-awesome" "vim" "tmux" "dmenu" "xclip")
-yay_packages=("visual-studio-code-bin" "microsoft-edge-stable-bin", "ibus-bamboo")
-#sudo pacman --noconfirm -Rc - < ./xfce4
 
+usage() {
+  echo "Usage: $0 -p|-y|-s|-c|-a"
+  exit 1
+}
 
-sudo pacman -S --noconfirm "${pacman_packages[@]}"
-yay -S --noconfirm "${yay_packages[@]}"
+install_pacman_packages() {
+  pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code xorg xorg-xinput xorg-xinit slock dconf
+}
 
-env DCONF_PROFILE=ibus dconf write /desktop/ibus/general/preload-engines "['xkb:us::eng', 'Bamboo']" && gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'us'), ('ibus', 'Bamboo')]"
+install_yay_packages() {
+  sudo -u $SUDO_USER yay -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo
+  # set up ibus-bamboo
+  export DCONF_PROFILE=ibus
+  dconf write /desktop/ibus/general/preload-engines "['xkb:us::eng', 'Bamboo']"
+  #setxkbmap -layout us,vn
+  dconf write /desktop/ibus/general/hotkey/next-engine "['<Control><Shift>space']"
+  cp ibus-daemon.service /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable ibus-daemon
+  systemctl start ibus-daemon
+  gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'us'), ('ibus', 'Bamboo')]"
+}
 
-softwares=("dwm" "st" "slstatus")
+install_suckless_software() {
+  softwares=("dwm" "st" "slstatus")
+  for sw in "${softwares[@]}"; do
+    git clone "http://git.suckless.org/${sw}"
+    cp ${sw}-config.h ${sw}/config.h
+    make -C ${sw} clean install
+  done
+}
 
-for sw in "${softwares[@]}"; do
-  git clone "http://git.suckless.org/${sw}"
-  cp ${sw}-config.h ${sw}/config.h
-  sudo make -C ${sw} clean install
+copy_dotfiles() {
+  find . -type f -name .\* ! -name .bashrc -exec cp {} ~/ \;
+  cat .bashrc >> ~/.bashrc
+}
+
+prepare_touchpad() {
+  mkdir -p /usr/local/bin
+  #chmod +x kayd_toggle_touchpad
+  cp kayd_toggle_touchpad /usr/local/bin/
+  #chown root: /usr/local/bin/kayd_toggle_touchpad
+  cp 01-touchpad.rules /etc/udev/rules.d/
+  #chown root: /etc/udev/rules.d/01-touchpad.rules
+  cp 01-libinput.conf /etc/X11/xorg.conf.d/
+  #chown root: /etc/X11/xorg.conf.d/01-libinput.conf
+  udevadm control --reload-rules && udevadm trigger
+}
+
+run_all_options() {
+  install_pacman_packages
+  install_yay_packages
+  install_suckless_software
+  copy_dotfiles
+  prepare_touchpad
+}
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"
+   exit 1
+fi
+
+while getopts ":pyscta" opt
+do
+  case "${opt}" in
+    p) install_pacman_packages ;;
+    y) install_yay_packages ;;
+    s) install_suckless_software ;;
+    c) copy_dotfiles ;;
+    a) run_all_options ;;
+    t) prepare_touchpad ;;
+    \?) usage ;;
+  esac
 done
-
-find . -type f -name .\* ! -name .bashrc -exec cp {} ~/ \;
-cat .bashrc >> ~/.bashrc
+# timedatectl list-timezones
+# sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+# dconf dump /desktop/ibus/

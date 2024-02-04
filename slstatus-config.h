@@ -67,7 +67,7 @@ static const struct arg args[] = {
 	/* function format          argument */
   //{ netspeed_rx, "%sB/s ", "wlan0" },
   { battery_perc, "%s%% ", "BAT0" },
-  { run_command, "%s ", "pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\d+%' | head -n1" },
+  { run_command, "%s ", "pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\\d+%' | head -n1" },
   { cpu_perc, "%s%% ", NULL },
   { ram_perc, "%s%% ", NULL },
 	{ datetime, "%s", "%A %F %T" },
