@@ -6,7 +6,7 @@ usage() {
 }
 
 install_pacman_packages() {
-  pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code xorg xorg-xinput xorg-xinit slock dconf
+  pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code xorg xorg-xinput xorg-xinit slock dconf ranger
 }
 
 install_yay_packages() {
