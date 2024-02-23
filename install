@@ -10,17 +10,13 @@ install_pacman_packages() {
 }
 
 install_yay_packages() {
+  sudo -u $SUDO_USER git clone https://aur.archlinux.org/yay.git && sudo -u $SUDO_USER cd yay && sudo -u $SUDO_USER makepkg -si
   sudo -u $SUDO_USER yay -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo
   # set up ibus-bamboo
   export DCONF_PROFILE=ibus
   dconf write /desktop/ibus/general/preload-engines "['xkb:us::eng', 'Bamboo']"
   #setxkbmap -layout us,vn
   dconf write /desktop/ibus/general/hotkey/next-engine "['<Control><Shift>space']"
-  cp ibus-daemon.service /etc/systemd/system/
-  systemctl daemon-reload
-  systemctl enable ibus-daemon
-  systemctl start ibus-daemon
-  gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'us'), ('ibus', 'Bamboo')]"
 }
 
 install_suckless_software() {
@@ -33,8 +29,8 @@ install_suckless_software() {
 }
 
 copy_dotfiles() {
-  find . -type f -name .\* ! -name .bashrc -exec cp {} ~/ \;
-  cat .bashrc >> ~/.bashrc
+  find . -type f -name .\* ! -name .bashrc -exec cp {} /home/$SUDO_USER/ \;
+  cat .bashrc >> /home/$SUDO_USER/.bashrc
 }
 
 prepare_touchpad() {
