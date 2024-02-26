@@ -1,0 +1,1 @@
+sudo pacman -Sy --noconfirm parted dosfstools

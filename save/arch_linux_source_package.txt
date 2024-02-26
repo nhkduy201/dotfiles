@@ -1,5 +1,2 @@
-# for source package
 git clone https://gitlab.archlinux.org/archlinux/packaging/packages/linux.git
 pkgctl repo clone --protocol=https linux
-# for ventoy
-sudo pacman -Sy --noconfirm parted dosfstools
