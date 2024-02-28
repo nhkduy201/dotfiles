@@ -1,0 +1,10 @@
+# look like we can create hotspot with nmtui but use this package that support GUI
+yay -S --noconfirm linux-wifi-hotspot
+sudo pacman -S --needed --noconfirm dnsmasq haveged hostapd
+# nmcli connect to a wifi to make wifi interface work, don't know but just do this
+wihotspot-gui
+# after create hotspot with GUI app, the config files, one is /etc/create_ap.conf created
+# then we can start hotspot with systemctl, which means we can enable, but not used now
+sudo systemctl start create_ap
+# to stop
+sudo systemctl stop create_ap

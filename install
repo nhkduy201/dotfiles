@@ -6,42 +6,53 @@ usage() {
 }
 
 install_pacman_packages() {
-  pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code xorg xorg-xinput xorg-xinit slock dconf ranger
+  pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code xorg xorg-xinput xorg-xinit slock dconf ranger wget libx11 libxinerama libxft freetype2
 }
 
 install_yay_packages() {
-  sudo -u $SUDO_USER git clone https://aur.archlinux.org/yay.git && sudo -u $SUDO_USER cd yay && sudo -u $SUDO_USER makepkg -si
-  sudo -u $SUDO_USER yay -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo
-  # set up ibus-bamboo
-  export DCONF_PROFILE=ibus
-  dconf write /desktop/ibus/general/preload-engines "['xkb:us::eng', 'Bamboo']"
-  #setxkbmap -layout us,vn
-  dconf write /desktop/ibus/general/hotkey/next-engine "['<Control><Shift>space']"
+  if [[ ! -d yay ]]; then
+    sudo -u $SUDO_USER git clone https://aur.archlinux.org/yay.git
+    pushd yay
+    sudo -u $SUDO_USER makepkg -si --noconfirm --needed
+    popd
+  fi
+  local pkgs="visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo"
+  for p in $pkgs; do
+    if ! sudo -u $SUDO_USER yay -Qs $p; then
+      sudo -u $SUDO_USER yay -S --noconfirm --needed -c $p
+    else
+      echo "$p installed - skip"
+    fi
+  done
 }
 
 install_suckless_software() {
   softwares=("dwm" "st" "slstatus")
   for sw in "${softwares[@]}"; do
-    git clone "http://git.suckless.org/${sw}"
-    cp ${sw}-config.h ${sw}/config.h
-    make -C ${sw} clean install
+    if [[ ! $(which $sw 2>/dev/null) && ! -d $sw ]]; then
+      git clone "http://git.suckless.org/${sw}"
+      cp ${sw}-config.h ${sw}/config.h
+      make -C ${sw} clean install
+    else
+      echo "$sw installed - skip"
+    fi
   done
 }
 
 copy_dotfiles() {
-  find . -type f -name .\* ! -name .bashrc -exec cp {} /home/$SUDO_USER/ \;
-  cat .bashrc >> /home/$SUDO_USER/.bashrc
+  find . -maxdepth 1 -type f -name .\* ! -name .bashrc ! -name .gitignore -exec cp -u {} /home/$SUDO_USER/ \;
+  if ! grep -q MYCONFIG "/home/$SUDO_USER/.bashrc"; then
+    cat .bashrc >> /home/$SUDO_USER/.bashrc
+  else
+    echo "already append .bashrc - skip"
+  fi
 }
 
 prepare_touchpad() {
   mkdir -p /usr/local/bin
-  #chmod +x kayd_toggle_touchpad
   cp kayd_toggle_touchpad /usr/local/bin/
-  #chown root: /usr/local/bin/kayd_toggle_touchpad
   cp 01-touchpad.rules /etc/udev/rules.d/
-  #chown root: /etc/udev/rules.d/01-touchpad.rules
   cp 01-libinput.conf /etc/X11/xorg.conf.d/
-  #chown root: /etc/X11/xorg.conf.d/01-libinput.conf
   udevadm control --reload-rules && udevadm trigger
 }
 
