@@ -19,7 +19,7 @@ install_yay_packages() {
   local pkgs="visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo"
   for p in $pkgs; do
     if ! sudo -u $SUDO_USER yay -Qs $p; then
-      sudo -u $SUDO_USER yay -S --noconfirm --needed -c $p
+      sudo -u $SUDO_USER yay -S --noconfirm --needed $p
     else
       echo "$p installed - skip"
     fi
@@ -27,12 +27,15 @@ install_yay_packages() {
 }
 
 install_suckless_software() {
-  softwares=("dwm" "st" "slstatus")
+  softwares=("dwm" "st" "slstatus-git")
   for sw in "${softwares[@]}"; do
     if [[ ! $(which $sw 2>/dev/null) && ! -d $sw ]]; then
-      git clone "http://git.suckless.org/${sw}"
+      sudo -u $SUDO_USER yay -G "${sw}"
       cp ${sw}-config.h ${sw}/config.h
-      make -C ${sw} clean install
+      pushd ${sw}
+      sudo -u $SUDO_USER makepkg -s --skipinteg --noconfirm
+      pacman -U --noconfirm *.pkg.tar.zst
+      popd
     else
       echo "$sw installed - skip"
     fi

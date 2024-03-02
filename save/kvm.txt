@@ -1,3 +1,9 @@
+sudo pacman -S --needed --noconfirm qemu virt-manager virt-viewer libvirt ebtables dnsmasq bridge-utils
+sudo systemctl enable --now libvirtd
+sudo usermod -aG libvirt $(whoami)
+sudo virsh net-autostart default
+sudo virsh net-start default
+
 sudo virt-install \
   --name leap15.5 \
   --memory 2048 \
@@ -11,3 +17,25 @@ sudo virt-install \
   --console pty,target_type=serial \
   --extra-args "console=ttyS0, earlyprintk=serial"
 
+sudo virt-install \
+  --name archlinux \
+  --memory 2048 \
+  --vcpus 2 \
+  --disk size=20 \
+  --cdrom '/var/lib/libvirt/images/archlinux-2024.02.01-x86_64.iso' \
+  --os-variant generic \
+  --network network=default \
+  --graphics vnc \
+  --boot menu=on
+
+sudo virt-install \
+  --name archlinux \
+  --memory 2048 \
+  --vcpus 2 \
+  --disk size=20 \
+  --cdrom '/var/lib/libvirt/images/archlinux-2024.02.01-x86_64.iso' \
+  --os-variant generic \
+  --network network=default \
+  --graphics vnc \
+  --boot menu=on,useserial=on \
+  --console pty,target_type=serial
