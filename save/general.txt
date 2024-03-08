@@ -1,0 +1,3 @@
+timedatectl list-timezones
+sudo timedatectl set-timezone Your/Timezone
+dconf dump /desktop/ibus/

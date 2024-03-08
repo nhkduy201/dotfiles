@@ -9,26 +9,25 @@ install_pacman_packages() {
   pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb \
   xorg xorg-xinput xorg-xinit slock dconf ranger wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
   nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
-  vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader wine-staging giflib lib32-giflib libpng \
-  lib32-libpng libldap lib32-libldap gnutls lib32-gnutls lutris steam bspwm sxhkd xdo \
-  mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse lib32-libpulse libgpg-error \
-  lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo lib32-libjpeg-turbo \
+  vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls \
+  lib32-gnutls lutris steam bspwm sxhkd xdo mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse \
+  lib32-libpulse libgpg-error lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo \
   sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama \
   ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 \
   lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader
 }
 
-install_yay_packages() {
-  if [[ ! -d yay ]]; then
-    sudo -u $SUDO_USER git clone https://aur.archlinux.org/yay.git
-    pushd yay
+install_paru_packages() {
+  if [[ ! -d paru ]]; then
+    sudo -u $SUDO_USER git clone https://aur.archlinux.org/paru.git
+    pushd paru
     sudo -u $SUDO_USER makepkg -si --noconfirm --needed
     popd
   fi
   local pkgs="visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot"
   for p in $pkgs; do
-    if ! sudo -u $SUDO_USER yay -Qs $p; then
-      sudo -u $SUDO_USER yay -S --noconfirm --needed $p
+    if ! sudo -u $SUDO_USER paru -Qs $p; then
+      sudo -u $SUDO_USER paru -S --noconfirm --needed $p
     else
       echo "$p installed - skip"
     fi
@@ -42,7 +41,7 @@ install_suckless_software() {
   softwares=("dwm" "st" "slstatus-git")
   for sw in "${softwares[@]}"; do
     if [[ ! $(which $sw 2>/dev/null) && ! -d $sw ]]; then
-      sudo -u $SUDO_USER yay -G "${sw}"
+      sudo -u $SUDO_USER paru -G "${sw}"
       cp ${sw}-config.h ${sw}/config.h
       pushd ${sw}
       sudo -u $SUDO_USER makepkg -s --skipinteg --noconfirm
@@ -55,11 +54,11 @@ install_suckless_software() {
 }
 
 copy_dotfiles() {
-  find . -maxdepth 1 -type f -name .\* ! -name .bashrc ! -name .gitignore -exec cp -u {} /home/$SUDO_USER/ \;
+  find . -maxdepth 1 -type f -name ".*" ! -name ".bashrc" ! -name ".gitignore" -exec cp -u {} /home/$SUDO_USER/ \;
   if ! grep -q MYCONFIG "/home/$SUDO_USER/.bashrc"; then
     cat .bashrc >> /home/$SUDO_USER/.bashrc
   else
-    echo "already append .bashrc - skip"
+    echo "already appended .bashrc - skip"
   fi
 }
 
@@ -75,23 +74,25 @@ download_softwares() {
   wget -q -P /home/$SUDO_USER/Downloads https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v2.9.1/ProtonUp-Qt-2.9.1-x86_64.AppImage
   pushd /home/$SUDO_USER/Downloads
   curl -OJLs https://download.cursor.sh/linux/appImage/x64
+  chown $SUDO_USER cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage
   chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage
   popd
 }
 
-git_config() {  
-  git config --global user.email nhkduy201@gmail.com
-  git config --global user.name nhkduy201
-  git config --global core.editor vim
+git_config() {
+  git config --global user.email "nhkduy201@gmail.com"
+  git config --global user.name "nhkduy201"
+  git config --global core.editor "vim"
 }
 
 run_all_options() {
   install_pacman_packages
-  install_yay_packages
+  install_paru_packages
   install_suckless_software
   copy_dotfiles
   prepare_touchpad
   download_softwares
+  git_config
 }
 
 if [[ $EUID -ne 0 ]]; then
@@ -99,11 +100,11 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-while getopts ":pysctadg" opt
+while getopts ":prscatdg" opt
 do
   case "${opt}" in
     p) install_pacman_packages ;;
-    y) install_yay_packages ;;
+    r) install_paru_packages ;;
     s) install_suckless_software ;;
     c) copy_dotfiles ;;
     a) run_all_options ;;
@@ -113,6 +114,3 @@ do
     \?) usage ;;
   esac
 done
-# timedatectl list-timezones
-# sudo timedatectl set-timezone Asia/Ho_Chi_Minh
-# dconf dump /desktop/ibus/
