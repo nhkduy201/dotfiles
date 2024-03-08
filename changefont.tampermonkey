@@ -1,0 +1,29 @@
+// ==UserScript==
+// @name         Conditional Source Code Pro Medium Font Update
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Periodically update the font of elements not already set to 'Source Code Pro Medium'
+// @author       YourName
+// @match        *://*/*
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Function to change the font family of an element if needed
+    function changeFontIfNeeded(element) {
+        const currentFont = window.getComputedStyle(element).fontFamily;
+        if (!currentFont.includes('Source Code Pro Medium')) {
+            element.style.setProperty('font-family', "'Source Code Pro Medium', monospace", 'important');
+        }
+    }
+
+    // Function to check and update fonts if needed
+    function updateFontsIfNeeded() {
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(changeFontIfNeeded);
+    }
+    setInterval(updateFontsIfNeeded, 1000);
+})();

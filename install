@@ -1,16 +1,16 @@
 #!/bin/bash
 
 usage() {
-  echo "Usage: $0 -p|-y|-s|-c|-a"
+  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g"
   exit 1
 }
 
 install_pacman_packages() {
   pacman -S --noconfirm --needed ttf-font-awesome gvim tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb \
-  xorg xorg-xinput xorg-xinit slock dconf ranger wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq\
+  xorg xorg-xinput xorg-xinit slock dconf ranger wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
   nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
   vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader wine-staging giflib lib32-giflib libpng \
-  lib32-libpng libldap lib32-libldap gnutls lib32-gnutls lutris steam \
+  lib32-libpng libldap lib32-libldap gnutls lib32-gnutls lutris steam bspwm sxhkd xdo \
   mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse lib32-libpulse libgpg-error \
   lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo lib32-libjpeg-turbo \
   sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama \
@@ -33,6 +33,9 @@ install_yay_packages() {
       echo "$p installed - skip"
     fi
   done
+  cp microsoft-edge.desktop /usr/share/applications/
+  xdg-mime default microsoft-edge.desktop x-scheme-handler/http
+  xdg-mime default microsoft-edge.desktop x-scheme-handler/https
 }
 
 install_suckless_software() {
@@ -68,12 +71,27 @@ prepare_touchpad() {
   udevadm control --reload-rules && udevadm trigger
 }
 
+download_softwares() {
+  wget -q -P /home/$SUDO_USER/Downloads https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v2.9.1/ProtonUp-Qt-2.9.1-x86_64.AppImage
+  pushd /home/$SUDO_USER/Downloads
+  curl -OJLs https://download.cursor.sh/linux/appImage/x64
+  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage
+  popd
+}
+
+git_config() {  
+  git config --global user.email nhkduy201@gmail.com
+  git config --global user.name nhkduy201
+  git config --global core.editor vim
+}
+
 run_all_options() {
   install_pacman_packages
   install_yay_packages
   install_suckless_software
   copy_dotfiles
   prepare_touchpad
+  download_softwares
 }
 
 if [[ $EUID -ne 0 ]]; then
@@ -81,7 +99,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-while getopts ":pyscta" opt
+while getopts ":pysctadg" opt
 do
   case "${opt}" in
     p) install_pacman_packages ;;
@@ -90,6 +108,8 @@ do
     c) copy_dotfiles ;;
     a) run_all_options ;;
     t) prepare_touchpad ;;
+    d) download_softwares ;;
+    g) git_config ;;
     \?) usage ;;
   esac
 done

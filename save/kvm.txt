@@ -18,6 +18,19 @@ sudo virt-install \
   --extra-args "console=ttyS0, earlyprintk=serial"
 
 sudo virt-install \
+  --name leap42.3 \
+  --memory 2048 \
+  --vcpus 2 \
+  --disk size=20 \
+  --location /var/lib/libvirt/images/openSUSE-Leap-42.3-DVD-x86_64.iso \
+  --os-variant opensuse42.3 \
+  --network network=default \
+  --graphics none \
+  --boot menu=on,useserial=on \
+  --console pty,target_type=serial \
+  --extra-args "console=ttyS0, earlyprintk=serial"
+
+sudo virt-install \
   --name archlinux \
   --memory 2048 \
   --vcpus 2 \
