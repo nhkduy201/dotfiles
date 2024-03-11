@@ -54,6 +54,7 @@ alias vi='vim'
 alias pn='eval "$(/home/kayd/cp/utils/mcf pn vim)"'
 alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
 alias ll='ls -alF'
+alias v='nvim'
 
 #sleep 0.1
 #wmctrl -i -r $(wmctrl -lx | grep xfce4-terminal | cut -d' ' -f1) -b add,fullscreen
