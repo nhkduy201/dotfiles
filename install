@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage() {
-  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k"
+  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k|-n"
   exit 1
 }
 
@@ -13,7 +13,7 @@ install_pacman_packages() {
   lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb \
   lib32-libpulse libgpg-error lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo \
   sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama \
-  ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers \
+  ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers neovim \
   lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader
 }
 
@@ -80,9 +80,9 @@ download_softwares() {
 }
 
 git_config() {
-  git config --global user.email "nhkduy201@gmail.com"
-  git config --global user.name "nhkduy201"
-  git config --global core.editor "vim"
+  sudo -u $SUDO_USER git config --global user.email "nhkduy201@gmail.com"
+  sudo -u $SUDO_USER git config --global user.name "nhkduy201"
+  sudo -u $SUDO_USER git config --global core.editor "vim"
 }
 
 keyboard_backlight() {
@@ -92,6 +92,12 @@ keyboard_backlight() {
   popd
 }
 
+nvidia_driver() {
+  wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/550.54.14/NVIDIA-Linux-x86_64-550.54.14.run
+  chmod +x NVIDIA-Linux-x86_64-*.run
+  ./NVIDIA-Linux-x86_64-*.run -s
+  reboot
+}
 run_all_options() {
   install_pacman_packages
   install_paru_packages
@@ -101,6 +107,7 @@ run_all_options() {
   download_softwares
   git_config
   keyboard_backlight
+  nvidia_driver
 }
 
 if [[ $EUID -ne 0 ]]; then
@@ -108,7 +115,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-while getopts ":prscatdgk" opt
+while getopts ":prscatdgkn" opt
 do
   case "${opt}" in
     p) install_pacman_packages ;;
@@ -120,6 +127,7 @@ do
     d) download_softwares ;;
     g) git_config ;;
     k) keyboard_backlight ;;
+    n) nvidia_driver ;;
     \?) usage ;;
   esac
 done
