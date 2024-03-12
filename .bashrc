@@ -49,10 +49,9 @@ copy_file_clipboard() {
 }
 
 # ALIAS
-alias tmat='tmux attach || tmux'
-alias vi='vim'
-alias pn='eval "$(/home/kayd/cp/utils/mcf pn vim)"'
-alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
+#alias tmat='tmux attach || tmux'
+#alias pn='eval "$(/home/kayd/cp/utils/mcf pn vim)"'
+#alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
 alias ll='ls -alF'
 alias v='nvim'
 
@@ -72,6 +71,6 @@ fi
 # open tmux
 if [[ $TERM_PROGRAM != "vscode" ]]; then
   if [[ -z $TMUX ]]; then
-    tmat
+    tmux attach || tmux
   fi
 fi
