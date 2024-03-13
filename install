@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage() {
-  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k|-n"
+  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k"
   exit 1
 }
 
@@ -33,8 +33,8 @@ install_paru_packages() {
     fi
   done
   cp microsoft-edge.desktop /usr/share/applications/
-  xdg-mime default microsoft-edge.desktop x-scheme-handler/http
-  xdg-mime default microsoft-edge.desktop x-scheme-handler/https
+  sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
+  sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
 }
 
 install_suckless_software() {
@@ -71,12 +71,13 @@ prepare_touchpad() {
 }
 
 download_softwares() {
-  wget -q -P /home/$SUDO_USER/Downloads https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v2.9.1/ProtonUp-Qt-2.9.1-x86_64.AppImage
-  pushd /home/$SUDO_USER/Downloads
+  cd /home/$SUDO_USER/Downloads
+  sudo -u $SUDO_USER wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v2.9.1/ProtonUp-Qt-2.9.1-x86_64.AppImage
+  sudo -u $SUDO_USER wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/550.54.14/NVIDIA-Linux-x86_64-550.54.14.run
   curl -OJLs https://download.cursor.sh/linux/appImage/x64
-  chown $SUDO_USER cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage
-  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage
-  popd
+  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage NVIDIA-Linux-x86_64-*.run
+  ./NVIDIA-Linux-x86_64-*.run -s
+  reboot
 }
 
 git_config() {
@@ -86,28 +87,19 @@ git_config() {
 }
 
 keyboard_backlight() {
-  git clone https://github.com/imShara/l5p-kbl
-  pushd l5p-kbl
-  sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p_kbl.py
-  popd
+  sudo -u $SUDO_USER git clone https://github.com/imShara/l5p-kbl
+  sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 }
 
-nvidia_driver() {
-  wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/550.54.14/NVIDIA-Linux-x86_64-550.54.14.run
-  chmod +x NVIDIA-Linux-x86_64-*.run
-  ./NVIDIA-Linux-x86_64-*.run -s
-  reboot
-}
 run_all_options() {
   install_pacman_packages
   install_paru_packages
   install_suckless_software
   copy_dotfiles
   prepare_touchpad
-  download_softwares
   git_config
   keyboard_backlight
-  nvidia_driver
+  download_softwares
 }
 
 if [[ $EUID -ne 0 ]]; then
@@ -115,7 +107,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-while getopts ":prscatdgkn" opt
+while getopts ":prscatdgk" opt
 do
   case "${opt}" in
     p) install_pacman_packages ;;
@@ -124,10 +116,9 @@ do
     c) copy_dotfiles ;;
     a) run_all_options ;;
     t) prepare_touchpad ;;
-    d) download_softwares ;;
     g) git_config ;;
     k) keyboard_backlight ;;
-    n) nvidia_driver ;;
+    d) download_softwares ;;
     \?) usage ;;
   esac
 done
