@@ -226,7 +226,7 @@
     "offline": false,
     "packages": [
         "git",
-        "gvim"
+        "neovim"
     ],
     "parallel downloads": 0,
     "profile_config": {
