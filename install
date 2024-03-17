@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage() {
-  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k"
+  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k|-b"
   exit 1
 }
 
@@ -15,7 +15,7 @@ install_pacman_packages() {
   sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama xdotool \
   ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers neovim firefox \
   lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader torbrowser-launcher \
-  unrar
+  unrar sbctl
 }
 
 install_paru_packages() {
@@ -103,12 +103,22 @@ run_all_options() {
   download_softwares
 }
 
+secure_boot() {
+	sbctl create-keys
+	sbctl enroll-keys -m
+	sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+	sbctl sign -s /boot/EFI/grub/grubx64.efi
+	sbctl sign -s /boot/vmlinuz-linux
+	sbctl verify
+	sbctl status
+}
+
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
 fi
 
-while getopts ":prscatdgk" opt
+while getopts ":prscatdgkb" opt
 do
   case "${opt}" in
     p) install_pacman_packages ;;
@@ -120,6 +130,7 @@ do
     g) git_config ;;
     k) keyboard_backlight ;;
     d) download_softwares ;;
+    b) secure_boot ;;
     \?) usage ;;
   esac
 done
