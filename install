@@ -7,7 +7,7 @@ usage() {
 
 install_pacman_packages() {
   pacman -S --noconfirm --needed ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb \
-  xorg xorg-xinput xorg-xinit slock dconf ranger wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
+  xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
   nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
   vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls \
   lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb \
@@ -15,7 +15,7 @@ install_pacman_packages() {
   sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama xdotool \
   ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers firefox \
   lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader torbrowser-launcher \
-  unrar sbctl
+  unrar sbctl os-prober
 }
 
 install_paru_packages() {
@@ -72,20 +72,29 @@ prepare_touchpad() {
 }
 
 download_softwares() {
-  cd /home/$SUDO_USER/Downloads
-  sudo -u $SUDO_USER wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v2.9.1/ProtonUp-Qt-2.9.1-x86_64.AppImage
-  sudo -u $SUDO_USER wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/550.54.14/NVIDIA-Linux-x86_64-550.54.14.run
+  PROTONUP_VERSION="2.9.1"
+  NVIDIA_VERSION="550.54.14"
+  DISCORD_VERSION="0.0.45"
+  
+  runuser -l $SUDO_USER -c "bash -c \"
+  mkdir -p ~/Downloads
+  cd ~/Downloads
+  wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
+  wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
   curl -OJLs https://download.cursor.sh/linux/appImage/x64
-  curl -OJLs https://dl.discordapp.net/apps/linux/0.0.45/discord-0.0.45.tar.gz
-  tar xzf discord-0.0.45.tar.gz
-  mkdir -p /home/$SUDO_USER/.local/bin
-  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-*-x86_64.AppImage NVIDIA-Linux-x86_64-*.run
-  ln -sf /home/$SUDO_USER/Downloads/Discord/Discord /home/$SUDO_USER/.local/bin/discord
-  ln -sf /home/$SUDO_USER/Downloads/ProtonUp-Qt-2.9.1-x86_64.AppImage /home/$SUDO_USER/.local/bin/protonup-qt
-  ln -sf /home/$SUDO_USER/Downloads/$(ls cursor-*x86_64.AppImage) /home/$SUDO_USER/.local/bin/cursor
-  #./NVIDIA-Linux-x86_64-*.run -s
-  #reboot
+  curl -OJLs https://dl.discordapp.net/apps/linux/${DISCORD_VERSION}/discord-${DISCORD_VERSION}.tar.gz
+  tar xzf discord-${DISCORD_VERSION}.tar.gz
+  mkdir -p ~/.local/bin
+  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
+  ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
+  ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
+  ln -sf ~/Downloads/cursor-*x86_64.AppImage ~/.local/bin/cursor
+  sudo ./NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run -s
+  \"
+  "
+  reboot
 }
+
 
 git_config() {
   sudo -u $SUDO_USER git config --global user.email "nhkduy201@gmail.com"
@@ -110,13 +119,18 @@ run_all_options() {
 }
 
 secure_boot() {
-	sbctl create-keys
-	sbctl enroll-keys -m
-	sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
-	sbctl sign -s /boot/EFI/grub/grubx64.efi
-	sbctl sign -s /boot/vmlinuz-linux
-	sbctl verify
-	sbctl status
+  sbctl create-keys
+  sbctl enroll-keys -m
+  sbctl sign -s /boot/vmlinuz-linux
+  if [[ -d /run/systemd/system && -d /boot/loader ]]; then
+    sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+    bootctl install
+  elif [ -d /boot/grub ]; then
+    sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+    sbctl sign -s /boot/EFI/grub/grubx64.efi
+  fi
+  sbctl verify
+  sbctl status
 }
 
 if [[ $EUID -ne 0 ]]; then
