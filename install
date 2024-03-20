@@ -127,7 +127,8 @@ secure_boot() {
     bootctl install
   elif [ -d /boot/grub ]; then
     sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
-    sbctl sign -s /boot/EFI/grub/grubx64.efi
+    sbctl sign -s /boot/grub/x86_64-efi/grub.efi
+    sbctl sign -s /boot/grub/x86_64-efi/core.efi
   fi
   sbctl verify
   sbctl status
