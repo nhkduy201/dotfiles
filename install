@@ -19,20 +19,15 @@ install_pacman_packages() {
 }
 
 install_paru_packages() {
-  if [[ ! -d paru ]]; then
+  if [[ ! $(which paru 2>/dev/null) && ! -d paru ]]; then
     sudo -u $SUDO_USER git clone https://aur.archlinux.org/paru.git
     pushd paru
-    sudo -u $SUDO_USER makepkg -si --noconfirm --needed
+    sudo -u $SUDO_USER makepkg -s --noconfirm --needed
+    pacman -U --noconfirm *.pkg.tar.zst
     popd
   fi
-  local pkgs="visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot nvidia nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils opencl-nvidia"
-  for p in $pkgs; do
-    if ! sudo -u $SUDO_USER paru -Qs $p; then
-      sudo -u $SUDO_USER paru -S --noconfirm --needed $p
-    else
-      echo "$p installed - skip"
-    fi
-  done
+  paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin \
+  ibus-bamboo linux-wifi-hotspot nvidia nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils opencl-nvidia
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
@@ -45,7 +40,7 @@ install_suckless_software() {
       sudo -u $SUDO_USER paru -G "${sw}"
       cp ${sw}-config.h ${sw}/config.h
       pushd ${sw}
-      sudo -u $SUDO_USER makepkg -s --skipinteg --noconfirm
+      sudo -u $SUDO_USER makepkg -s --noconfirm --needed
       pacman -U --noconfirm *.pkg.tar.zst
       popd
     else

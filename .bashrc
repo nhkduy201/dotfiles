@@ -54,6 +54,8 @@ copy_file_clipboard() {
 #alias p='eval "$(/home/kayd/cp/utils/mcf p)"'
 alias ll='ls -alF'
 alias v='nvim'
+alias vi='nvim'
+alias vim='nvim'
 
 #sleep 0.1
 #wmctrl -i -r $(wmctrl -lx | grep xfce4-terminal | cut -d' ' -f1) -b add,fullscreen
