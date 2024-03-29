@@ -1,152 +1,19 @@
 #!/bin/bash
 
-usage() {
-  echo "Usage: $0 -p|-r|-s|-c|-a|-t|-d|-g|-k|-b"
-  exit 1
-}
+# pacman -Sy
+# pacman -S --noconfirm archlinux-keyring
+# pacman -S --noconfirm archinstall git
+# git clone https://github.com/nhkduy201/dotfiles
+# archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
+# cp -r dotfiles /mnt/archinstall/home/kayd
+# arch-chroot /mnt/archinstall /bin/bash -c "su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
+# reboot
 
-install_pacman_packages() {
-  pacman -S --noconfirm --needed ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb \
-  xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
-  nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
-  vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls \
-  lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb \
-  lib32-libpulse libgpg-error lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo \
-  sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama xdotool \
-  ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers firefox \
-  lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader torbrowser-launcher \
-  unrar sbctl os-prober
-}
-
-install_paru_packages() {
-  if [[ ! $(which paru 2>/dev/null) && ! -d paru ]]; then
-    sudo -u $SUDO_USER git clone https://aur.archlinux.org/paru.git
-    pushd paru
-    sudo -u $SUDO_USER makepkg -s --noconfirm --needed
-    pacman -U --noconfirm *.pkg.tar.zst
-    popd
-  fi
-  rm -f /usr/share/applications/microsoft-edge.desktop
-  sudo -u $SUDO_USER paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot
-  cp microsoft-edge.desktop /usr/share/applications/
-  sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
-  sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
-}
-
-install_suckless_software() {
-  softwares=("dwm" "st" "slstatus-git")
-  for sw in "${softwares[@]}"; do
-    if [[ ! -d $sw ]]; then
-      sudo -u $SUDO_USER paru -G "${sw}"
-    else
-      echo "$sw installed - skip download"
-    fi
-    cp ${sw}-config.h ${sw}/config.h
-    pushd ${sw}
-    sudo -u $SUDO_USER makepkg -s --noconfirm --needed --skipinteg -f
-    pacman -U --noconfirm *.pkg.tar.zst
-    popd
-  done
-}
-
-copy_dotfiles() {
-  find . -maxdepth 1 -type f -name ".*" ! -name ".bashrc" ! -name ".gitignore" -exec cp -u {} /home/$SUDO_USER/ \;
-  if ! grep -q MYCONFIG "/home/$SUDO_USER/.bashrc"; then
-    cat .bashrc >> /home/$SUDO_USER/.bashrc
-  else
-    echo "already appended .bashrc - skip"
-  fi
-}
-
-prepare_touchpad() {
-  mkdir -p /usr/local/bin
-  cp kayd_toggle_touchpad /usr/local/bin/
-  cp 01-touchpad.rules /etc/udev/rules.d/
-  cp 01-libinput.conf /etc/X11/xorg.conf.d/
-  udevadm control --reload-rules && udevadm trigger
-}
-
-download_softwares() {
-  PROTONUP_VERSION="2.9.1"
-  NVIDIA_VERSION="550.54.14"
-  DISCORD_VERSION="0.0.47"
-  
-  runuser -l $SUDO_USER -c "bash -c \"
-  mkdir -p ~/Downloads
-  cd ~/Downloads
-  wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-  #wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
-  curl -OJLs https://download.cursor.sh/linux/appImage/x64
-  curl -OJLs https://dl.discordapp.net/apps/linux/${DISCORD_VERSION}/discord-${DISCORD_VERSION}.tar.gz
-  tar xzf discord-${DISCORD_VERSION}.tar.gz
-  mkdir -p ~/.local/bin
-  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage # NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
-  ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
-  ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
-  ln -sf ~/Downloads/cursor-*x86_64.AppImage ~/.local/bin/cursor
-  # sudo ./NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run -s
-  \"
-  "
-  #reboot
-}
-
-
-git_config() {
-  sudo -u $SUDO_USER git config --global user.email "nhkduy201@gmail.com"
-  sudo -u $SUDO_USER git config --global user.name "nhkduy201"
-  sudo -u $SUDO_USER git config --global core.editor "nvim"
-}
-
-keyboard_backlight() {
-  sudo -u $SUDO_USER git clone https://github.com/imShara/l5p-kbl
-  sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-}
-
-run_all_options() {
-  install_pacman_packages
-  install_paru_packages
-  install_suckless_software
-  copy_dotfiles
-  prepare_touchpad
-  git_config
-  keyboard_backlight
-  download_softwares
-}
-
-secure_boot() {
-  sbctl create-keys
-  sbctl enroll-keys -m
-  sbctl sign -s /boot/vmlinuz-linux
-  if [[ -d /run/systemd/system && -d /boot/loader ]]; then
-    sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-    bootctl install
-  elif [ -d /boot/grub ]; then
-    sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
-    sbctl sign -s /boot/grub/x86_64-efi/grub.efi
-    sbctl sign -s /boot/grub/x86_64-efi/core.efi
-  fi
-  sbctl verify
-  sbctl status
-}
-
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
-
-while getopts ":prscatdgkb" opt
-do
-  case "${opt}" in
-    p) install_pacman_packages ;;
-    r) install_paru_packages ;;
-    s) install_suckless_software ;;
-    c) copy_dotfiles ;;
-    a) run_all_options ;;
-    t) prepare_touchpad ;;
-    g) git_config ;;
-    k) keyboard_backlight ;;
-    d) download_softwares ;;
-    b) secure_boot ;;
-    \?) usage ;;
-  esac
-done
+pacman -Syu --noconfirm
+pacman -S --noconfirm archlinux-keyring archinstall git
+git clone https://github.com/nhkduy201/dotfiles
+archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
+mkdir -p /mnt/archinstall/home/kayd
+cp -r dotfiles /mnt/archinstall/home/kayd/
+arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles && su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
+reboot
