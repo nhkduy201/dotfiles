@@ -8,7 +8,7 @@ usage() {
 install_pacman_packages() {
   pacman -S --noconfirm --needed ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb \
   xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq \
-  nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
+  nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa \
   vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls \
   lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb \
   lib32-libpulse libgpg-error lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo \
@@ -26,8 +26,8 @@ install_paru_packages() {
     pacman -U --noconfirm *.pkg.tar.zst
     popd
   fi
-  paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin \
-  ibus-bamboo linux-wifi-hotspot nvidia nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils opencl-nvidia
+  rm -f /usr/share/applications/microsoft-edge.desktop
+  sudo -u $SUDO_USER paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
@@ -36,16 +36,16 @@ install_paru_packages() {
 install_suckless_software() {
   softwares=("dwm" "st" "slstatus-git")
   for sw in "${softwares[@]}"; do
-    if [[ ! $(which $sw 2>/dev/null) && ! -d $sw ]]; then
+    if [[ ! -d $sw ]]; then
       sudo -u $SUDO_USER paru -G "${sw}"
-      cp ${sw}-config.h ${sw}/config.h
-      pushd ${sw}
-      sudo -u $SUDO_USER makepkg -s --noconfirm --needed
-      pacman -U --noconfirm *.pkg.tar.zst
-      popd
     else
-      echo "$sw installed - skip"
+      echo "$sw installed - skip download"
     fi
+    cp ${sw}-config.h ${sw}/config.h
+    pushd ${sw}
+    sudo -u $SUDO_USER makepkg -s --noconfirm --needed --skipinteg -f
+    pacman -U --noconfirm *.pkg.tar.zst
+    popd
   done
 }
 
@@ -69,25 +69,25 @@ prepare_touchpad() {
 download_softwares() {
   PROTONUP_VERSION="2.9.1"
   NVIDIA_VERSION="550.54.14"
-  DISCORD_VERSION="0.0.45"
+  DISCORD_VERSION="0.0.47"
   
   runuser -l $SUDO_USER -c "bash -c \"
   mkdir -p ~/Downloads
   cd ~/Downloads
   wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-  wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
+  #wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
   curl -OJLs https://download.cursor.sh/linux/appImage/x64
   curl -OJLs https://dl.discordapp.net/apps/linux/${DISCORD_VERSION}/discord-${DISCORD_VERSION}.tar.gz
   tar xzf discord-${DISCORD_VERSION}.tar.gz
   mkdir -p ~/.local/bin
-  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
+  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage # NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
   ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
   ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
   ln -sf ~/Downloads/cursor-*x86_64.AppImage ~/.local/bin/cursor
-  sudo ./NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run -s
+  # sudo ./NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run -s
   \"
   "
-  reboot
+  #reboot
 }
 
 
