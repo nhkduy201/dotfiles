@@ -41,7 +41,7 @@ install_paru_packages() {
     (cd paru && sudo -u $SUDO_USER makepkg -s --noconfirm --needed && pacman -U --noconfirm *.pkg.tar.zst)
   fi
   rm -f /usr/share/applications/microsoft-edge.desktop
-  sudo -u $SUDO_USER paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot
+  sudo -u $SUDO_USER paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot nm-vpngate-git
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
