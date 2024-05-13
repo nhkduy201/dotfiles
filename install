@@ -9,11 +9,11 @@
 # arch-chroot /mnt/archinstall /bin/bash -c "su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
 # reboot
 
-pacman -Syu --noconfirm
-pacman -S --noconfirm archlinux-keyring archinstall git
+pacman -Sy
+pacman -S --noconfirm archlinux-keyring python archinstall git
 git clone https://github.com/nhkduy201/dotfiles
 archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
-mkdir -p /mnt/archinstall/home/kayd
-cp -r dotfiles /mnt/archinstall/home/kayd/
-arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles && su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
+# mkdir -p /mnt/archinstall/home/kayd
+# cp -r dotfiles /mnt/archinstall/home/kayd/
+# arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles && su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
 reboot
