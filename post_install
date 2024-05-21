@@ -47,6 +47,34 @@ install_paru_packages() {
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
 }
 
+insert_sed_command_before_make() {
+    local sw="$1"
+    local build_line_number=$(grep -n '^build() {' "${sw}/PKGBUILD" | cut -d: -f1)
+    if [[ -z "$build_line_number" ]]; then
+        echo "Build line number not found"
+        return 1
+    fi
+    local make_line_number=$(tail -n +"$((build_line_number+1))" "${sw}/PKGBUILD" | grep -n '^ *make' | head -n 1 | cut -d: -f1)
+    if [[ -z "$make_line_number" ]]; then
+        echo "Make line not found after build() {"
+        return 1
+    fi
+    local insert_line_number=$(( make_line_number + build_line_number ))
+    sed_command=""
+    if [[ $sw == "dwm" ]]; then
+        sed_command="sed -E -i 's#^CFLAGS\\\\s*=#CFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    elif [[ $sw == "st" ]]; then
+        sed_command="sed -E -i 's#^STCFLAGS\\\\s*=#STCFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    elif [[ $sw == "slstatus-git" ]]; then
+        sed_command="sed -E -i 's#^CFLAGS\\\\s*=#CFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    fi
+
+    # add to sed_command a sed command to remove all -Os
+    sed_command="${sed_command} && sed -E -i 's#-Os##g' \$(find . -name config.mk)"
+
+    sed -i "${insert_line_number}i\  ${sed_command}" "${sw}/PKGBUILD"
+}
+
 install_suckless_software() {
   local softwares=("dwm" "st" "slstatus-git")
   for sw in "${softwares[@]}"; do
@@ -56,6 +84,7 @@ install_suckless_software() {
       echo "$sw already installed - skipping download"
     fi
     cp "${sw}-config.h" "${sw}/config.h"
+    insert_sed_command_before_make "${sw}"
     (cd "${sw}" && sudo -u $SUDO_USER makepkg -s --noconfirm --needed --skipinteg -f && pacman -U --noconfirm *.pkg.tar.zst)
   done
 }
@@ -88,9 +117,10 @@ download_softwares() {
   runuser -l $SUDO_USER -c "bash -c \"
   mkdir -p ~/Downloads
   cd ~/Downloads
+  rm -rf Discord discord-*.tar.gz ProtonUp-Qt-*-x86_64.AppImage
   wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
   
-  curl -OJLs https://download.cursor.sh/linux/appImage/x64
+  curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
   curl -OJLs https://dl.discordapp.net/apps/linux/${DISCORD_VERSION}/discord-${DISCORD_VERSION}.tar.gz
   tar xzf discord-${DISCORD_VERSION}.tar.gz
   mkdir -p ~/.local/bin
