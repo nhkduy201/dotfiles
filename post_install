@@ -100,7 +100,7 @@ copy_dotfiles() {
 
 prepare_touchpad() {
   mkdir -p /usr/local/bin
-  cp kayd_toggle_touchpad /usr/local/bin/
+  cp touchpad-toggle /usr/local/bin/
   cp 01-touchpad.rules /etc/udev/rules.d/
   cp 01-libinput.conf /etc/X11/xorg.conf.d/
   udevadm control --reload-rules && udevadm trigger
