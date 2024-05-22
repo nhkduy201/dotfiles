@@ -56,6 +56,7 @@ alias ll='ls -alF'
 alias v='nvim'
 alias vi='nvim'
 alias vim='nvim'
+alias cursor='run_cursor() { cursor $1 &>/dev/null & }; run_cursor'
 
 #sleep 0.1
 #wmctrl -i -r $(wmctrl -lx | grep xfce4-terminal | cut -d' ' -f1) -b add,fullscreen

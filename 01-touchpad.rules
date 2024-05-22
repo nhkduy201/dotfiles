@@ -1,2 +1,2 @@
-ACTION=="add", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/kayd/.Xauthority", RUN+="/home/kayd/dotfiles/touchpad-toggle.sh disable"
-ACTION=="remove", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/kayd/.Xauthority", RUN+="/home/kayd/dotfiles/touchpad-toggle.sh enable"
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/__USERNAME__/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle disable"
+ACTION=="remove", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/__USERNAME__/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle enable"
