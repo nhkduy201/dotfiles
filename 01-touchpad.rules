@@ -1,2 +1,2 @@
-ACTION=="add", KERNEL=="mouse*", ENV{.INPUT_CLASS}=="mouse", RUN+="/bin/sh -c 'DISPLAY=:0 /usr/local/bin/kayd_toggle_touchpad disable'"
-ACTION=="remove", KERNEL=="mouse*", ENV{.INPUT_CLASS}=="mouse", RUN+="/bin/sh -c 'DISPLAY=:0 /usr/local/bin/kayd_toggle_touchpad enable'"
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/kayd/.Xauthority", RUN+="/home/kayd/dotfiles/touchpad-toggle.sh disable"
+ACTION=="remove", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/kayd/.Xauthority", RUN+="/home/kayd/dotfiles/touchpad-toggle.sh enable"

@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Get touchpad ID dynamically
+TOUCHPAD_ID=$(xinput | grep -i touchpad | grep -o 'id=[0-9]*' | awk -F= '{print $2}')
+
+case "$1" in
+    enable)
+        xinput enable $TOUCHPAD_ID
+        ;;
+    disable)
+        xinput disable $TOUCHPAD_ID
+        ;;
+    *)
+        echo "Usage: $0 {enable|disable}"
+        exit 1
+        ;;
+esac
