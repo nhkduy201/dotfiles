@@ -15,6 +15,7 @@ Options:
   -d  Download softwares
   -b  Secure boot
   -m  Change GRUB
+  -n  Set up systemd resolved
 EOF
   exit 1
 }
@@ -155,6 +156,24 @@ run_all_options() {
   download_softwares
   change_grub
   secure_boot
+  setup_systemd_resolved
+}
+
+setup_systemd_resolved() {
+  systemctl enable systemd-resolved --now
+  ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+  CONFIG_LINES="
+  DNS=8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844
+  FallbackDNS=1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001
+  DNSOverTLS=yes
+  "
+
+  sudo tee -a /etc/systemd/resolved.conf >/dev/null <<EOF
+  $CONFIG_LINES
+  EOF
+
+  systemctl restart systemd-resolved
 }
 
 change_grub() {
@@ -183,7 +202,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-while getopts ":prscatdgkbm" opt; do
+while getopts ":prscatdgkbmn" opt; do
   case "${opt}" in
     p) install_pacman_packages ;;
     r) install_paru_packages ;;
@@ -196,6 +215,7 @@ while getopts ":prscatdgkbm" opt; do
     d) download_softwares ;;
     b) secure_boot ;;
     m) change_grub ;;
+    n) setup_systemd_resolved ;;
     *) usage ;;
   esac
 done
