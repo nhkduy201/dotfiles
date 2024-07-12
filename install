@@ -12,6 +12,8 @@
 pacman -Sy
 pacman -S --noconfirm archlinux-keyring python archinstall git
 git clone https://github.com/nhkduy201/dotfiles
+sed -i "s/\"!root-password\": \"password\"/\"!root-password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
+sed -i "s/\"!password\": \"password\"/\"!password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
 archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
 
 # mkdir -p /mnt/archinstall/home/kayd
