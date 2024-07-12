@@ -29,7 +29,7 @@ Description=Run a one-time command after reboot
 Type=oneshot
 WorkingDirectory=/home/kayd/dotfiles
 ExecStart=/usr/bin/sudo /bin/bash /home/kayd/dotfiles/post_install -a
-ExecStartPost=/bin/sh -c 'systemctl disable one-time-command.service'
+ExecStartPost=/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && systemctl daemon-reload'
 
 [Install]
 WantedBy=multi-user.target
