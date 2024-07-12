@@ -1,27 +1,50 @@
 #!/bin/bash
 
-# pacman -Sy
-# pacman -S --noconfirm archlinux-keyring
-# pacman -S --noconfirm archinstall git
-# git clone https://github.com/nhkduy201/dotfiles
-# archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
-# cp -r dotfiles /mnt/archinstall/home/kayd
-# arch-chroot /mnt/archinstall /bin/bash -c "su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
-# reboot
-
+# Update package database and install necessary packages
 pacman -Sy
 pacman -S --noconfirm archlinux-keyring python archinstall git
+
+# Clone dotfiles repository
 git clone https://github.com/nhkduy201/dotfiles
+
+# Update user credentials in the configuration file
 sed -i "s/\"!root-password\": \"password\"/\"!root-password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
 sed -i "s/\"!password\": \"password\"/\"!password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
+
+# Run archinstall with the provided configuration and credentials
 archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
 
-# mkdir -p /mnt/archinstall/home/kayd
-# cp -r dotfiles /mnt/archinstall/home/kayd/
-# arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles && su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
+# Get SSID and passphrase using iwctl
+ssid=$(iwctl station wlan0 show | grep "Connected network" | awk '{print $3}')
+passphrase=$(iwctl station wlan0 show-security | grep "Passphrase" | awk '{print $2}')
+
+echo "iwctl SSID: $ssid"
+echo "iwctl Passphrase: $passphrase"
+
+# Prompt user to use nmcli to get SSID and passphrase
+read -p "Do you want to use nmcli to get the SSID and Passphrase? (y/n): " use_nmcli
+if [[ $use_nmcli == "y" ]]; then
+  ssid=$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)
+  passphrase=$(nmcli -s -g 802-11-wireless-security.psk connection show "$ssid")
+  echo "nmcli SSID: $ssid"
+  echo "nmcli Passphrase: $passphrase"
+
+  # Prompt user to manually enter SSID and passphrase
+  read -p "Do you want to manually enter SSID and Passphrase? (y/n): " manually_enter
+  if [[ $manually_enter == "y" ]]; then
+    iwctl station wlan0 get-networks
+    read -p "Enter SSID: " ssid
+    read -p "Enter Passphrase: " passphrase
+  fi
+fi
+
+# Create necessary directories and save SSID and passphrase
+mkdir -p /mnt/archinstall/home/kayd
+echo "$ssid" > /mnt/archinstall/home/kayd/wifi_ssid
+echo "$passphrase" > /mnt/archinstall/home/kayd/wifi_password
 
 # Create the one-time systemd service
-cat <<EOF > /etc/systemd/system/one-time-command.service
+cat <<EOF > /mnt/archinstall/etc/systemd/system/one-time-command.service
 [Unit]
 Description=Run a one-time command after reboot
 
@@ -35,7 +58,8 @@ ExecStartPost=/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && 
 WantedBy=multi-user.target
 EOF
 
-# Enable the one-time command service
-systemctl enable one-time-command.service
+# Enable the one-time systemd service
+arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
+# Reboot the system
 reboot
