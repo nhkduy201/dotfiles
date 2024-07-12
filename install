@@ -20,9 +20,22 @@ archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_cred
 # cp -r dotfiles /mnt/archinstall/home/kayd/
 # arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles && su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a && exit'"
 
-mkdir -p /mnt/archinstall/home/kayd
-cp -r dotfiles /mnt/archinstall/home/kayd/
-arch-chroot /mnt/archinstall /bin/bash -c "chown -R kayd:kayd /home/kayd/dotfiles"
-arch-chroot /mnt/archinstall su kayd -c 'cd /home/kayd/dotfiles && sudo ./post_install -a'
+# Create the one-time systemd service
+cat <<EOF > /etc/systemd/system/one-time-command.service
+[Unit]
+Description=Run a one-time command after reboot
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/kayd/dotfiles
+ExecStart=/usr/bin/sudo /bin/bash /home/kayd/dotfiles/post_install -a
+ExecStartPost=/bin/sh -c 'systemctl disable one-time-command.service'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable the one-time command service
+systemctl enable one-time-command.service
 
 reboot
