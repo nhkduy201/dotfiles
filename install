@@ -51,7 +51,7 @@ EOF
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
 # Correctly add a sudoers rule for kayd
-arch-chroot /mnt/archinstall /bin/bash -c 'echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" | sudo tee /etc/sudoers.d/kayd_nopasswd'
+arch-chroot /mnt/archinstall /bin/bash -c 'echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" | tee /etc/sudoers.d/kayd_nopasswd'
 
 # Reboot the system
 reboot
