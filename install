@@ -18,17 +18,17 @@ pacman -S --noconfirm archlinux-keyring python archinstall git
 git clone https://github.com/nhkduy201/dotfiles
 
 # Update user credentials in the configuration file
-sed -i "s/\"!root-password\": \"password\"/\"!root-password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
-sed -i "s/\"!password\": \"password\"/\"!password\": \"$PASSWORD\"/" dotfiles/user_credentials.json
+sed -i "s/\"!root-password\": \"password\"/\"!root-password\": \"$MY_PASSWORD\"/" dotfiles/user_credentials.json
+sed -i "s/\"!password\": \"password\"/\"!password\": \"$MY_PASSWORD\"/" dotfiles/user_credentials.json
 
 # Run archinstall with the provided configuration and credentials
 archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
 
 # Save SSID and passphrase
-mkdir -p /mnt/archinstall/home/kayd
-mv dotfiles /mnt/archinstall/home/kayd
-iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to //' > /mnt/archinstall/home/kayd/wifi_ssid
-grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/kayd/wifi_password
+mkdir -p /mnt/archinstall/home/$MY_USER
+mv dotfiles /mnt/archinstall/home/$MY_USER
+iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to //' > /mnt/archinstall/home/$MY_USER/wifi_ssid
+grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/$MY_USER/wifi_password
 
 # Create the one-time systemd service
 cat <<EOF > /mnt/archinstall/etc/systemd/system/one-time-command.service
@@ -37,10 +37,10 @@ Description=Run a one-time command after reboot
 
 [Service]
 Type=oneshot
-User=kayd
-Group=kayd
-WorkingDirectory=/home/kayd/dotfiles
-ExecStart=/usr/bin/sudo /home/kayd/dotfiles/post_install -a
+User=$MY_USER
+Group=$MY_USER
+WorkingDirectory=/home/$MY_USER/dotfiles
+ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
 ExecStartPost=/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && systemctl daemon-reload'
 
 [Install]
@@ -50,8 +50,8 @@ EOF
 # Enable the one-time systemd service
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
-# Correctly add a sudoers rule for kayd
-arch-chroot /mnt/archinstall /bin/bash -c 'echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" | tee /etc/sudoers.d/kayd_nopasswd'
+# Correctly add a sudoers rule for $MY_USER
+arch-chroot /mnt/archinstall /bin/bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/00_$MY_USER_nopasswd"
 
 # Reboot the system
 reboot
