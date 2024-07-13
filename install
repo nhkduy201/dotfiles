@@ -27,7 +27,7 @@ archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_cred
 # Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/$MY_USER
 mv dotfiles /mnt/archinstall/home/$MY_USER
-iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to //' > /mnt/archinstall/home/$MY_USER/wifi_ssid
+iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to\s*//' | sed 's/\s*$//' > /mnt/archinstall/home/$MY_USER/wifi_ssid
 grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/$MY_USER/wifi_password
 
 # Create the one-time systemd service
