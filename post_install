@@ -46,6 +46,8 @@ install_paru_packages() {
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
+  sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
+  sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
 }
 
 insert_sed_command_before_make() {

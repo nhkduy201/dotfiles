@@ -1,14 +1,13 @@
+# This service is not used because ibus-daemon is started inside the .xinitrc for now
 [Unit]
 Description=IBus Daemon
 
 [Service]
+Type=simple
 ExecStart=/usr/bin/ibus-daemon -drx
 Environment=GTK_IM_MODULE=ibus
 Environment=XMODIFIERS=@im=ibus
 Environment=QT_IM_MODULE=ibus
-Type=forking
-Restart=always
-RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
