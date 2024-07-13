@@ -26,6 +26,7 @@ archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_cred
 
 # Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/kayd
+mv dotfiles /mnt/archinstall/home/kayd
 iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to //' > /mnt/archinstall/home/kayd/wifi_ssid
 grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/kayd/wifi_password
 
