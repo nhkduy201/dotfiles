@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# Improved error handling function
+handle_error() {
+    local line_content=$(sed -n "${LINENO}p" "$0")
+    echo "An error occurred at line $LINENO: $line_content. Exiting..." >&2
+    logger -t "$(basename $0)" "An error occurred at line $LINENO: $line_content. Exiting..." 
+    exit 1
+}
+
+# Setup a trap to catch errors and execute handle_error function
+trap 'handle_error $LINENO' ERR
+
 usage() {
   cat <<EOF
 Usage: $0 [options]
@@ -147,12 +158,12 @@ keyboard_backlight() {
   sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 }
 
-add_sudoers_rule() {
-  local sudoers_tmp=$(mktemp)
-  echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" > "$sudoers_tmp"
-  visudo -cf "$sudoers_tmp" && cat "$sudoers_tmp" >> /etc/sudoers.d/kayd_nopasswd
-  rm -f "$sudoers_tmp"
-}
+# add_sudoers_rule() {
+#   local sudoers_tmp=$(mktemp)
+#   echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" > "$sudoers_tmp"
+#   visudo -cf "$sudoers_tmp" && cat "$sudoers_tmp" >> /etc/sudoers.d/kayd_nopasswd
+#   rm -f "$sudoers_tmp"
+# }
 
 configure_check_network() {
   local ssid=$(cat /home/kayd/wifi_ssid)
@@ -166,7 +177,7 @@ configure_check_network() {
 }
 
 run_all_options() {
-  add_sudoers_rule
+  # add_sudoers_rule
   configure_check_network
   install_pacman_packages
   install_paru_packages
@@ -193,7 +204,7 @@ setup_systemd_resolved() {
 
   sudo tee -a /etc/systemd/resolved.conf >/dev/null <<EOF
   $CONFIG_LINES
-  EOF
+EOF
 
   systemctl restart systemd-resolved
 }

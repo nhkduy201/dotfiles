@@ -37,8 +37,10 @@ Description=Run a one-time command after reboot
 
 [Service]
 Type=oneshot
+User=kayd
+Group=kayd
 WorkingDirectory=/home/kayd/dotfiles
-ExecStart=/usr/bin/sudo /bin/bash /home/kayd/dotfiles/post_install -a
+ExecStart=/usr/bin/sudo /home/kayd/dotfiles/post_install -a
 ExecStartPost=/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && systemctl daemon-reload'
 
 [Install]
@@ -47,6 +49,9 @@ EOF
 
 # Enable the one-time systemd service
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
+
+# Correctly add a sudoers rule for kayd
+arch-chroot /mnt/archinstall /bin/bash -c 'echo "kayd ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/git, /usr/bin/xdg-mime, /usr/bin/paru, /usr/bin/makepkg" | sudo tee /etc/sudoers.d/kayd_nopasswd'
 
 # Reboot the system
 reboot
