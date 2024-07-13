@@ -1,5 +1,67 @@
 #!/bin/bash
 
+# Improved error handling function
+handle_error() {
+    local line_content=$(sed -n "${LINENO}p" "$0")
+    echo "An error occurred at line $LINENO: $line_content. Exiting..." >&2
+    exit 1
+}
+
+# Setup a trap to catch errors and execute handle_error function
+trap 'handle_error $LINENO' ERR
+
+# Function to list and read input
+list_and_read() {
+    echo "$1"
+    eval "$2"
+}
+
+# Function to read input and validate for emptiness
+read_and_validate() {
+    local prompt="$1"
+    local var_name="$2"
+    
+    read -p "$prompt" "$var_name"
+    [ -z "${!var_name}" ] && { echo "$var_name cannot be empty"; exit 1; }
+}
+
+# List and read available adapters
+list_and_read "Available adapters:" 'iwctl adapter list'
+read_and_validate "Enter the adapter to power on (e.g., wlan0): " adapter
+
+# Power on the selected adapter
+iwctl adapter "$adapter" set-property Powered on
+
+# List and read available devices
+list_and_read "Available devices:" 'iwctl device list'
+read_and_validate "Enter the device to power on (e.g., wlan0): " device
+
+# Power on the selected device
+iwctl device "$device" set-property Powered on
+
+# Scan for networks
+iwctl station "$device" scan
+sleep 2
+
+# List available networks
+list_and_read "Available networks:" "iwctl station '$device' get-networks"
+
+# Prompt for network details
+read_and_validate "Enter the SSID of the network you want to connect to: " ssid
+read -sp "Enter the passphrase for the network: " passphrase
+echo
+
+# Attempt to connect to the network
+echo "Attempting to connect to $ssid..."
+if iwctl station "$device" connect "$ssid" --passphrase="$passphrase"; then
+    echo "Successfully connected to $ssid."
+    echo "Network details:"
+    iwctl station "$device" show
+else
+    echo "Failed to connect to $ssid."
+    exit 1
+fi
+
 # Update package database and install necessary packages
 pacman -Sy
 pacman -S --noconfirm archlinux-keyring python archinstall git
@@ -14,31 +76,7 @@ sed -i "s/\"!password\": \"password\"/\"!password\": \"$PASSWORD\"/" dotfiles/us
 # Run archinstall with the provided configuration and credentials
 archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
 
-# Get SSID and passphrase using iwctl
-ssid=$(iwctl station wlan0 show | grep "Connected network" | awk '{print $3}')
-passphrase=$(iwctl station wlan0 show-security | grep "Passphrase" | awk '{print $2}')
-
-echo "iwctl SSID: $ssid"
-echo "iwctl Passphrase: $passphrase"
-
-# Prompt user to use nmcli to get SSID and passphrase
-read -p "Do you want to use nmcli to get the SSID and Passphrase? (y/n): " use_nmcli
-if [[ $use_nmcli == "y" ]]; then
-  ssid=$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)
-  passphrase=$(nmcli -s -g 802-11-wireless-security.psk connection show "$ssid")
-  echo "nmcli SSID: $ssid"
-  echo "nmcli Passphrase: $passphrase"
-
-  # Prompt user to manually enter SSID and passphrase
-  read -p "Do you want to manually enter SSID and Passphrase? (y/n): " manually_enter
-  if [[ $manually_enter == "y" ]]; then
-    iwctl station wlan0 get-networks
-    read -p "Enter SSID: " ssid
-    read -p "Enter Passphrase: " passphrase
-  fi
-fi
-
-# Create necessary directories and save SSID and passphrase
+# Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/kayd
 echo "$ssid" > /mnt/archinstall/home/kayd/wifi_ssid
 echo "$passphrase" > /mnt/archinstall/home/kayd/wifi_password
