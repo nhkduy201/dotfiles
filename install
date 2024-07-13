@@ -10,58 +10,6 @@ handle_error() {
 # Setup a trap to catch errors and execute handle_error function
 trap 'handle_error $LINENO' ERR
 
-# Function to list and read input
-list_and_read() {
-    echo "$1"
-    eval "$2"
-}
-
-# Function to read input and validate for emptiness
-read_and_validate() {
-    local prompt="$1"
-    local var_name="$2"
-    
-    read -p "$prompt" "$var_name"
-    [ -z "${!var_name}" ] && { echo "$var_name cannot be empty"; exit 1; }
-}
-
-# List and read available adapters
-list_and_read "Available adapters:" 'iwctl adapter list'
-read_and_validate "Enter the adapter to power on (e.g., wlan0): " adapter
-
-# Power on the selected adapter
-iwctl adapter "$adapter" set-property Powered on
-
-# List and read available devices
-list_and_read "Available devices:" 'iwctl device list'
-read_and_validate "Enter the device to power on (e.g., wlan0): " device
-
-# Power on the selected device
-iwctl device "$device" set-property Powered on
-
-# Scan for networks
-iwctl station "$device" scan
-sleep 2
-
-# List available networks
-list_and_read "Available networks:" "iwctl station '$device' get-networks"
-
-# Prompt for network details
-read_and_validate "Enter the SSID of the network you want to connect to: " ssid
-read -sp "Enter the passphrase for the network: " passphrase
-echo
-
-# Attempt to connect to the network
-echo "Attempting to connect to $ssid..."
-if iwctl station "$device" connect "$ssid" --passphrase="$passphrase"; then
-    echo "Successfully connected to $ssid."
-    echo "Network details:"
-    iwctl station "$device" show
-else
-    echo "Failed to connect to $ssid."
-    exit 1
-fi
-
 # Update package database and install necessary packages
 pacman -Sy
 pacman -S --noconfirm archlinux-keyring python archinstall git
@@ -78,8 +26,8 @@ archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_cred
 
 # Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/kayd
-echo "$ssid" > /mnt/archinstall/home/kayd/wifi_ssid
-echo "$passphrase" > /mnt/archinstall/home/kayd/wifi_password
+iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to //' > /mnt/archinstall/home/kayd/wifi_ssid
+grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/kayd/wifi_password
 
 # Create the one-time systemd service
 cat <<EOF > /mnt/archinstall/etc/systemd/system/one-time-command.service
