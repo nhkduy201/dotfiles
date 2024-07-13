@@ -51,7 +51,7 @@ EOF
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
 # Correctly add a sudoers rule for $MY_USER
-arch-chroot /mnt/archinstall /bin/bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/00_$MY_USER_nopasswd"
+arch-chroot /mnt/archinstall echo "$MY_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/00_$MY_USER_nopasswd
 
 # Reboot the system
 reboot
