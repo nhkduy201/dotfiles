@@ -44,6 +44,8 @@ User=$MY_USER
 Group=$MY_USER
 WorkingDirectory=/home/$MY_USER/dotfiles
 ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target
