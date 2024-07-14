@@ -182,6 +182,7 @@ run_all_options() {
   change_grub
   secure_boot
   setup_systemd_resolved
+  touch /var/lib/$SUDO_USER-post-install.done
 }
 
 setup_systemd_resolved() {
@@ -221,6 +222,10 @@ secure_boot() {
   sbctl verify
   sbctl status
 }
+
+if [ -f "/var/lib/$SUDO_USER-post-install.done" ]; then
+    exit 0
+fi
 
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
