@@ -27,13 +27,16 @@ archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_cred
 # Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/$MY_USER
 mv dotfiles /mnt/archinstall/home/$MY_USER
-iwctl station wlan0 show | grep 'Connected to' | sed 's/.*Connected to\s*//' | sed 's/\s*$//' > /mnt/archinstall/home/$MY_USER/wifi_ssid
+iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//' > /mnt/archinstall/home/$MY_USER/wifi_ssid
 grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/$MY_USER/wifi_password
 
 # Create the one-time systemd service
 cat <<EOF > /mnt/archinstall/etc/systemd/system/one-time-command.service
 [Unit]
 Description=Run a one-time command after reboot
+After=network-online.target
+BindsTo=network-online.target
+Before=getty.target
 
 [Service]
 Type=oneshot
@@ -41,7 +44,7 @@ User=$MY_USER
 Group=$MY_USER
 WorkingDirectory=/home/$MY_USER/dotfiles
 ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
-ExecStartPost=/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && systemctl daemon-reload'
+ExecStartPost=-/bin/sh -c 'rm -f /etc/systemd/system/one-time-command.service && systemctl daemon-reload'
 
 [Install]
 WantedBy=multi-user.target
@@ -50,8 +53,11 @@ EOF
 # Enable the one-time systemd service
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
-# Correctly add a sudoers rule for $MY_USER
-arch-chroot /mnt/archinstall echo "$MY_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/00_$MY_USER_nopasswd
+# Correctly add a sudoers rule
+arch-chroot /mnt/archinstall bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tell /etc/sudoers.d/00_nopasswd"
+
+
+arch-chroot /mnt/archinstall bash -c "chown -R $MY_USER:$MY_USER /home/$MY_USER/dotfiles"
 
 # Reboot the system
 reboot
