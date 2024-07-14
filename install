@@ -36,7 +36,7 @@ cat <<EOF > /mnt/archinstall/etc/systemd/system/one-time-command.service
 Description=Run a one-time command after reboot
 After=network-online.target
 BindsTo=network-online.target
-Before=getty.target
+Before=getty@tty1.service
 
 [Service]
 Type=oneshot
@@ -54,10 +54,10 @@ EOF
 arch-chroot /mnt/archinstall systemctl enable one-time-command.service
 
 # Correctly add a sudoers rule
-arch-chroot /mnt/archinstall bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tell /etc/sudoers.d/00_nopasswd"
+arch-chroot /mnt/archinstall bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/00_nopasswd"
 
-
-arch-chroot /mnt/archinstall bash -c "chown -R $MY_USER:$MY_USER /home/$MY_USER/dotfiles"
+# Change ownership
+arch-chroot /mnt/archinstall bash -c "chown -R $MY_USER:$MY_USER /home/$MY_USER/"
 
 # Reboot the system
 reboot
