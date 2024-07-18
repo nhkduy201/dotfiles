@@ -63,6 +63,7 @@ static const char *volupcmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", 
 static const char *voldowncmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL };
 static const char *edgecmd[] = { "microsoft-edge-stable", NULL };
 static const char *slockcmd[] = { "slock", NULL };
+static const char *scrotselcmd[] = { "scrot", "-s", NULL };
 
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
@@ -99,11 +100,14 @@ static const Key keys[] = {
 	TAGKEYS(                        XK_8,                      7)
 	TAGKEYS(                        XK_9,                      8)
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
-  // My keybinds
-  { MODKEY, XK_w, spawn, {.v = edgecmd } },
-  { MODKEY, XK_F2, spawn, {.v = voldowncmd } },
-  { MODKEY, XK_F3, spawn, {.v = volupcmd } },
-  { MODKEY|ShiftMask, XK_l, spawn, {.v = slockcmd } },
+	// My keybinds
+	{ MODKEY, XK_w, spawn, {.v = edgecmd } },
+	{ MODKEY, XK_F2, spawn, {.v = voldowncmd } },
+	{ MODKEY, XK_F3, spawn, {.v = volupcmd } },
+	{ MODKEY|ShiftMask, XK_l, spawn, {.v = slockcmd } },
+	{ MODKEY|ShiftMask, XK_s, spawn, {.v = scrotselcmd } },
+	// { Mod1Mask,                     XK_Tab,    focusstack,     {.i = +1 } },
+	// { Mod1Mask|ShiftMask,           XK_Tab,    focusstack,     {.i = -1 } },
 };
 
 /* button definitions */

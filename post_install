@@ -33,8 +33,8 @@ EOF
 
 install_pacman_packages() {
   local packages=(
-    ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb
-    xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse discord openssh dnsmasq
+    ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol
+    xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq
     nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa
     vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls
     lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb
@@ -57,6 +57,10 @@ install_paru_packages() {
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
+  sudo -u $SUDO_USER export GTK_IM_MODULE=ibus
+  sudo -u $SUDO_USER export XMODIFIERS=@im=ibus
+  sudo -u $SUDO_USER export QT_IM_MODULE=ibus
+  sudo -u $SUDO_USER ibus-daemon -drx &
   sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
   sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
 }
@@ -123,7 +127,6 @@ prepare_touchpad() {
 
 download_softwares() {
   local PROTONUP_VERSION="2.9.1"
-  local DISCORD_VERSION="0.0.47"
   #local NVIDIA_VERSION="550.54.14"
   #wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
   # NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
@@ -136,8 +139,8 @@ download_softwares() {
   wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
   
   curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
-  curl -OJLs https://dl.discordapp.net/apps/linux/${DISCORD_VERSION}/discord-${DISCORD_VERSION}.tar.gz
-  tar xzf discord-${DISCORD_VERSION}.tar.gz
+  curl -L -o discord.tar.gz https://discord.com/api/download?platform=linux&format=tar.gz
+  tar xzf discord.tar.gz
   mkdir -p ~/.local/bin
   chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
   ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
@@ -170,6 +173,9 @@ configure_check_network() {
 }
 
 run_all_options() {
+  if [ -f "/var/lib/$SUDO_USER-post-install.done" ]; then
+    exit 0
+  fi
   configure_check_network
   install_pacman_packages
   install_paru_packages
@@ -222,10 +228,6 @@ secure_boot() {
   sbctl verify
   sbctl status
 }
-
-if [ -f "/var/lib/$SUDO_USER-post-install.done" ]; then
-    exit 0
-fi
 
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
