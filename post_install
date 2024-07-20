@@ -34,7 +34,7 @@ EOF
 install_pacman_packages() {
   local packages=(
     ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol
-    xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq
+    xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq zip
     nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa
     vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls
     lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb
@@ -162,6 +162,9 @@ keyboard_backlight() {
 }
 
 configure_check_network() {
+  if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
+	  return
+  fi
   local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
   local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
 
