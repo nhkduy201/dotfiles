@@ -33,7 +33,7 @@ EOF
 
 install_pacman_packages() {
   local packages=(
-    ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol
+    ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol python-pip
     xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq zip
     nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa
     vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls
@@ -57,12 +57,6 @@ install_paru_packages() {
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
-  sudo -u $SUDO_USER export GTK_IM_MODULE=ibus
-  sudo -u $SUDO_USER export XMODIFIERS=@im=ibus
-  sudo -u $SUDO_USER export QT_IM_MODULE=ibus
-  sudo -u $SUDO_USER ibus-daemon -drx &
-  sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
-  sudo -u $SUDO_USER gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
 }
 
 insert_sed_command_before_make() {
@@ -163,7 +157,7 @@ keyboard_backlight() {
 
 configure_check_network() {
   if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
-	  return
+    return
   fi
   local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
   local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
