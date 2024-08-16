@@ -183,7 +183,7 @@ run_all_options() {
   keyboard_backlight
   download_softwares
   change_grub
-  secure_boot
+  # secure_boot
   setup_systemd_resolved
   touch /var/lib/$SUDO_USER-post-install.done
 }
