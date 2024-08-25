@@ -35,7 +35,7 @@ cat <<EOF > /mnt/archinstall/etc/systemd/system/$MY_USER-post-install.service
 [Unit]
 Description=$MY_USER post install
 After=network-online.target
-BindsTo=network-online.target
+Wants=network-online.target
 Before=getty@tty1.service
 
 [Service]
@@ -43,6 +43,7 @@ Type=oneshot
 User=$MY_USER
 Group=$MY_USER
 WorkingDirectory=/home/$MY_USER/dotfiles
+ExecStartPre=/bin/sh -c 'until ping -c1 google.com; do sleep 5; done;'
 ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
 StandardOutput=journal+console
 StandardError=journal+console
