@@ -1,0 +1,41 @@
+gamemoderun gamescope -W 2560 -H 1440 -be -- %command%
+gamescope --steam -f -W 2560 -H 1440 %command%
+env --unset=SDL_VIDEODRIVER VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.i686.json:/usr/share/vulkan/icd.d/radeon_icd.x86_64.json vk_radv %command%
+gamemoderun PROTON_HIDE_NVIDIA_GPU=0 PROTON_ENABLE_NVAPI=1 VKD3D_CONFIG=dxr,dxr11 PROTON_ENABLE_NGX_UPDATER=1 %command%
+VKD3D_VULKAN_DEVICE=0 %command%
+mangohud gamemoderun %command%
+MANGOHUD=1 DXVK_FILTER_DEVICE_NAME=AMD gamemoderun %command% -dx12
+mangohud gamemoderun PROTON_ENABLE_NVAPI=1 %command% -dx11 -force
+
+---------------------------------------------------------------------------------
+
+echo "--- System Information ---"
+echo "CPU: $(lscpu | grep "Model name" | cut -d ':' -f2 | xargs)"
+echo "GPU: $(lspci | grep -i nvidia | cut -d ':' -f3)"
+echo "RAM: $(free -h | awk '/^Mem:/ {print $2}')"
+echo "Storage:"
+lsblk -d -o name,rota,size,model | grep -v loop
+
+echo -e "\n--- Display Information ---"
+xrandr | grep ' connected'
+
+echo -e "\n--- Kernel Version ---"
+uname -r
+
+echo -e "\n--- Proton Version ---"
+ls ~/.steam/root/compatibilitytools.d/ 2>/dev/null || echo "No custom Proton versions found"
+
+echo -e "\n--- Installed Gaming Software ---"
+pacman -Qs gamemode mangohud corectrl
+
+echo -e "\n--- Temperature Information ---"
+sensors | grep -E "Core|edge"
+
+echo -e "\n--- Steam Games (This may take a moment) ---"
+find ~/.steam/steam/steamapps/common -maxdepth 1 -type d | cut -d'/' -f7-
+
+---------------------------------------------------------------------------------
+
+mangohud gamemoderun PROTON_HIDE_NVIDIA_GPU=0 PROTON_ENABLE_NVAPI=1 VKD3D_CONFIG=dxr,dxr11 PROTON_ENABLE_NGX_UPDATER=1 __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia %command% -dx12
+
+but if run into any issue, remove the VKD3D_CONFIG=dxr,dxr11
