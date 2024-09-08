@@ -63,7 +63,9 @@ static const char *volupcmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", 
 static const char *voldowncmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL };
 static const char *edgecmd[] = { "microsoft-edge-stable", NULL };
 static const char *slockcmd[] = { "slock", NULL };
-static const char *scrotselcmd[] = { "scrot", "-s", NULL };
+static const char *screenshot_region[] = { "sh", "-c", "scrot -s && xclip -selection clipboard -t image/png $(ls -t $HOME/*_[0-9]*x[0-9]*_scrot.png | head -n 1)", NULL };
+static const char *screenshot_fullscreen[] = { "sh", "-c", "scrot && xclip -selection clipboard -t image/png $(ls -t $HOME/*_[0-9]*x[0-9]*_scrot.png | head -n 1)", NULL };
+static const char *screenshot_window[] = { "sh", "-c", "scrot -u && xclip -selection clipboard -t image/png $(ls -t $HOME/*_[0-9]*x[0-9]*_scrot.png | head -n 1)", NULL };
 
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
@@ -105,7 +107,9 @@ static const Key keys[] = {
 	{ MODKEY, XK_F2, spawn, {.v = voldowncmd } },
 	{ MODKEY, XK_F3, spawn, {.v = volupcmd } },
 	{ MODKEY|ShiftMask, XK_l, spawn, {.v = slockcmd } },
-	{ MODKEY|ShiftMask, XK_s, spawn, {.v = scrotselcmd } },
+	{ ShiftMask,                    XK_Print,  spawn,          {.v = screenshot_region } },
+	{ 0,                            XK_Print,  spawn,          {.v = screenshot_fullscreen } },
+	{ Mod1Mask,                     XK_Print,  spawn,          {.v = screenshot_window } },
 	// { Mod1Mask,                     XK_Tab,    focusstack,     {.i = +1 } },
 	// { Mod1Mask|ShiftMask,           XK_Tab,    focusstack,     {.i = -1 } },
 };
