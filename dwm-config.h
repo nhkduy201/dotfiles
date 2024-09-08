@@ -1,3 +1,4 @@
+#include <X11/XF86keysym.h>
 /* See LICENSE file for copyright and license details. */
 
 /* appearance */
@@ -59,8 +60,10 @@ static const Layout layouts[] = {
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
 static const char *termcmd[]  = { "st", NULL };
-static const char *volupcmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%", NULL };
-static const char *voldowncmd[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL };
+static const char *volumemute[] = { "pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL };
+static const char *micmute[] = { "pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle", NULL };
+static const char *volumedown[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL };
+static const char *volumeup[] = { "pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%", NULL };
 static const char *edgecmd[] = { "microsoft-edge-stable", NULL };
 static const char *slockcmd[] = { "slock", NULL };
 static const char *screenshot_region[] = { "sh", "-c", "scrot -s && xclip -selection clipboard -t image/png $(ls -t $HOME/*_[0-9]*x[0-9]*_scrot.png | head -n 1)", NULL };
@@ -104,8 +107,10 @@ static const Key keys[] = {
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
 	// My keybinds
 	{ MODKEY, XK_w, spawn, {.v = edgecmd } },
-	{ MODKEY, XK_F2, spawn, {.v = voldowncmd } },
-	{ MODKEY, XK_F3, spawn, {.v = volupcmd } },
+	{ 0,                            XF86XK_AudioMute,    spawn, {.v = volumemute } },
+	{ 0,                            XF86XK_AudioMicMute, spawn, {.v = micmute } },
+	{ 0,                            XF86XK_AudioLowerVolume, spawn, {.v = volumedown } },
+	{ 0,                            XF86XK_AudioRaiseVolume, spawn, {.v = volumeup } },
 	{ MODKEY|ShiftMask, XK_l, spawn, {.v = slockcmd } },
 	{ ShiftMask,                    XK_Print,  spawn,          {.v = screenshot_region } },
 	{ 0,                            XK_Print,  spawn,          {.v = screenshot_fullscreen } },
