@@ -1,0 +1,1 @@
+On Microsoft Edge you can disable the text prediction feature if you find it annoying by going to edge://settings/languages, under the 'Writing assistance' section, disable the 'Use text prediction'.
