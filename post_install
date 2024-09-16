@@ -16,7 +16,7 @@ usage() {
 Usage: $0 [options]
 Options:
   -p  Install pacman packages
-  -r  Install paru packages
+  -r  Install AUR packages
   -s  Install suckless software
   -c  Copy dotfiles
   -a  Run all options
@@ -48,13 +48,24 @@ install_pacman_packages() {
   pacman -S --noconfirm --needed "${packages[@]}"
 }
 
-install_paru_packages() {
+install_aur_packages() {
+  local aur_helper=""
   if ! command -v paru &>/dev/null; then
     sudo -u $SUDO_USER git clone https://aur.archlinux.org/paru.git
     (cd paru && sudo -u $SUDO_USER makepkg -s --noconfirm --needed && pacman -U --noconfirm *.pkg.tar.zst)
+    if ! command -v paru &>/dev/null; then
+      echo "Paru installation failed. Falling back to yay."
+      sudo -u $SUDO_USER git clone https://aur.archlinux.org/yay.git
+      (cd yay && sudo -u $SUDO_USER makepkg -s --noconfirm --needed && pacman -U --noconfirm *.pkg.tar.zst)
+      aur_helper="yay"
+    else
+      aur_helper="paru"
+    fi
+  else
+    aur_helper="paru"
   fi
   rm -f /usr/share/applications/microsoft-edge.desktop
-  sudo -u $SUDO_USER paru -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot nm-vpngate-git lf ripgrep
+  sudo -u $SUDO_USER $aur_helper -S --noconfirm --needed visual-studio-code-bin microsoft-edge-stable-bin ibus-bamboo linux-wifi-hotspot nm-vpngate-git lf ripgrep
   cp microsoft-edge.desktop /usr/share/applications/
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/http
   sudo -u $SUDO_USER xdg-mime default microsoft-edge.desktop x-scheme-handler/https
@@ -157,17 +168,39 @@ keyboard_backlight() {
 }
 
 configure_check_network() {
+  # Check if we're already connected to the internet
   if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
-    return
+    echo "Internet connection already established."
+    return 0
   fi
-  local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
-  local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
 
-  nmcli device wifi connect "$ssid" password "$wifi_password"
-  if ! nmcli -t -f active,ssid dev wifi | grep '^yes:' || ! ping -c 1 google.com &> /dev/null; then
-    echo "Network connection failed. Please check your settings."
-    exit 1
+  # Check if we're connected via Ethernet
+  if ip link show | grep -q "state UP" | grep -q "eth"; then
+    echo "Ethernet connection detected. Attempting to configure..."
+    systemctl restart NetworkManager
+    sleep 5
+    if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
+      echo "Internet connection established via Ethernet."
+      return 0
+    fi
   fi
+
+  # If not connected via Ethernet, try Wi-Fi
+  if [ -f "/home/$SUDO_USER/wifi_ssid" ] && [ -f "/home/$SUDO_USER/wifi_password" ]; then
+    local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
+    local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
+
+    echo "Attempting to connect to Wi-Fi network: $ssid"
+    nmcli device wifi connect "$ssid" password "$wifi_password"
+    sleep 5
+    if nmcli -t -f active,ssid dev wifi | grep -q '^yes:' && ping -c 1 google.com &> /dev/null; then
+      echo "Successfully connected to Wi-Fi network: $ssid"
+      return 0
+    fi
+  fi
+
+  echo "Failed to establish an internet connection. Please check your network settings."
+  return 1
 }
 
 run_all_options() {
@@ -176,7 +209,7 @@ run_all_options() {
   fi
   configure_check_network
   install_pacman_packages
-  install_paru_packages
+  install_aur_packages
   install_suckless_software
   copy_dotfiles
   prepare_touchpad
@@ -246,7 +279,7 @@ fi
 while getopts ":prscatdgkbmnh" opt; do
   case "${opt}" in
     p) install_pacman_packages ;;
-    r) install_paru_packages ;;
+    r) install_aur_packages ;;
     s) install_suckless_software ;;
     c) copy_dotfiles ;;
     a) run_all_options ;;
