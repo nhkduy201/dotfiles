@@ -168,45 +168,64 @@ keyboard_backlight() {
 }
 
 configure_check_network() {
-  # Check if we're already connected to the internet
-  if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
-    echo "Internet connection already established."
-    return 0
-  fi
+  local max_attempts=5
+  local attempt=1
+  local timeout=30
 
-  # Check if we're connected via Ethernet
-  if ip link show | grep -q "state UP" | grep -q "eth"; then
-    echo "Ethernet connection detected. Attempting to configure..."
-    systemctl restart NetworkManager
-    sleep 5
-    if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
-      echo "Internet connection established via Ethernet."
+  while [ $attempt -le $max_attempts ]; do
+    echo "Attempt $attempt of $max_attempts to establish network connection..."
+
+    # Check if we're already connected to the internet
+    if timeout $timeout ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+      echo "Internet connection already established."
       return 0
     fi
-  fi
 
-  # If not connected via Ethernet, try Wi-Fi
-  if [ -f "/home/$SUDO_USER/wifi_ssid" ] && [ -f "/home/$SUDO_USER/wifi_password" ]; then
-    local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
-    local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
-
-    echo "Attempting to connect to Wi-Fi network: $ssid"
-    nmcli device wifi connect "$ssid" password "$wifi_password"
-    sleep 5
-    if nmcli -t -f active,ssid dev wifi | grep -q '^yes:' && ping -c 1 google.com &> /dev/null; then
-      echo "Successfully connected to Wi-Fi network: $ssid"
-      return 0
+    # Check if NetworkManager is running, if not, start it
+    if ! systemctl is-active --quiet NetworkManager; then
+      echo "NetworkManager is not running. Starting it..."
+      systemctl start NetworkManager
+      sleep 5
     fi
-  fi
 
-  echo "Failed to establish an internet connection. Please check your network settings."
+    # Check if we're connected via Ethernet
+    if ip link show | grep -q "state UP" | grep -q "eth"; then
+      echo "Ethernet connection detected. Attempting to configure..."
+      if nmcli connection up "$(nmcli -t -f NAME connection show --active | grep eth)" >/dev/null 2>&1; then
+        sleep 5
+        if timeout $timeout ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+          echo "Internet connection established via Ethernet."
+          return 0
+        fi
+      fi
+    fi
+
+    # If not connected via Ethernet, try Wi-Fi
+    if [ -f "/home/$SUDO_USER/wifi_ssid" ] && [ -f "/home/$SUDO_USER/wifi_password" ]; then
+      local ssid=$(cat /home/$SUDO_USER/wifi_ssid)
+      local wifi_password=$(cat /home/$SUDO_USER/wifi_password)
+
+      echo "Attempting to connect to Wi-Fi network: $ssid"
+      if nmcli device wifi connect "$ssid" password "$wifi_password" >/dev/null 2>&1; then
+        sleep 10
+        if timeout $timeout ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+          echo "Successfully connected to Wi-Fi network: $ssid"
+          return 0
+        fi
+      fi
+    fi
+
+    echo "Failed to establish an internet connection. Retrying in 30 seconds..."
+    sleep 30
+    attempt=$((attempt + 1))
+  done
+
+  echo "Failed to establish an internet connection after $max_attempts attempts."
+  echo "The script will continue, but some operations may fail without internet connectivity."
   return 1
 }
 
 run_all_options() {
-  if [ -f "/var/lib/$SUDO_USER-post-install.done" ]; then
-    exit 0
-  fi
   configure_check_network
   install_pacman_packages
   install_aur_packages
@@ -220,7 +239,6 @@ run_all_options() {
   # secure_boot
   setup_systemd_resolved
   disable_telemetry
-  touch /var/lib/$SUDO_USER-post-install.done
 }
 
 setup_systemd_resolved() {

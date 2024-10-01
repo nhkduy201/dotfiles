@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check if required environment variables are set
+if [ -z "$MY_PASSWORD" ] || [ -z "$MY_USER" ]; then
+    echo "Error: MY_PASSWORD and MY_USER must be set before running this script."
+    exit 1
+fi
+
 # Improved error handling function
 handle_error() {
     local line_content=$(sed -n "${LINENO}p" "$0")
@@ -22,13 +28,17 @@ sed -i "s/\"!root-password\": \"password\"/\"!root-password\": \"$MY_PASSWORD\"/
 sed -i "s/\"!password\": \"password\"/\"!password\": \"$MY_PASSWORD\"/" dotfiles/user_credentials.json
 
 # Run archinstall with the provided configuration and credentials
-archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent
+if ! archinstall --config dotfiles/user_configuration.json --creds dotfiles/user_credentials.json --silent; then
+    echo "Error: archinstall failed. Check the logs for more information."
+    exit 1
+fi
 
 # Save SSID and passphrase
 mkdir -p /mnt/archinstall/home/$MY_USER
 mv dotfiles /mnt/archinstall/home/$MY_USER
-iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//' > /mnt/archinstall/home/$MY_USER/wifi_ssid
-grep Passphrase /var/lib/iwd/"$(iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' | sed 's/\s*$//').psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/$MY_USER/wifi_password
+iwctl station wlan0 show | grep 'Connected network' | sed 's/.*Connected network\s*//' > /mnt/archinstall/home/$MY_USER/wifi_ssid
+SSID=$(cat /mnt/archinstall/home/$MY_USER/wifi_ssid)
+grep Passphrase "/var/lib/iwd/${SSID}.psk" | sed 's/.*Passphrase=//' > /mnt/archinstall/home/$MY_USER/wifi_password
 
 # Create the one-time systemd service
 cat <<EOF > /mnt/archinstall/etc/systemd/system/$MY_USER-post-install.service
@@ -43,8 +53,8 @@ Type=oneshot
 User=$MY_USER
 Group=$MY_USER
 WorkingDirectory=/home/$MY_USER/dotfiles
-ExecStartPre=/bin/sh -c 'until ping -c1 google.com; do sleep 5; done;'
 ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
+ExecStartPost=/usr/bin/systemctl disable $MY_USER-post-install.service
 StandardOutput=journal+console
 StandardError=journal+console
 
