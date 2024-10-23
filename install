@@ -6,6 +6,15 @@ if [ -z "$MY_PASSWORD" ] || [ -z "$MY_USER" ]; then
     exit 1
 fi
 
+# Check for window manager argument
+if [ "$1" != "dwm" ] && [ "$1" != "i3" ]; then
+    echo "Error: Please specify 'dwm' or 'i3' as an argument."
+    echo "Usage: $0 [dwm|i3]"
+    exit 1
+fi
+
+WM_CHOICE="$1"
+
 # Improved error handling function
 handle_error() {
     local line_content=$(sed -n "${LINENO}p" "$0")
@@ -18,7 +27,7 @@ trap 'handle_error $LINENO' ERR
 
 # Update package database and install necessary packages
 pacman -Sy
-pacman -S --noconfirm archlinux-keyring python archinstall git
+pacman -S --noconfirm --needed archlinux-keyring python archinstall git
 
 # Clone dotfiles repository
 git clone https://github.com/nhkduy201/dotfiles
@@ -53,7 +62,7 @@ Type=oneshot
 User=$MY_USER
 Group=$MY_USER
 WorkingDirectory=/home/$MY_USER/dotfiles
-ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a
+ExecStart=/usr/bin/sudo /home/$MY_USER/dotfiles/post_install -a $WM_CHOICE
 ExecStartPost=/usr/bin/systemctl disable $MY_USER-post-install.service
 StandardOutput=journal+console
 StandardError=journal+console
