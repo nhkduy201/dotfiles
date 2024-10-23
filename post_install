@@ -28,6 +28,7 @@ Options:
   -m  Change GRUB
   -n  Set up systemd resolved
   -h  Disable telemetry for an-anime-game-launcher-bin
+  -G  Install gaming packages
 
 wm_choice: 'dwm' or 'i3'
 EOF
@@ -38,14 +39,7 @@ install_pacman_packages() {
   local common_packages=(
     ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol python-pip
     xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq zip
-    nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader lib32-mesa
-    vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap lib32-libldap gnutls
-    lib32-gnutls lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils libpulse python-pyusb
-    lib32-libpulse libgpg-error lib32-libgpg-error alsa-plugins lib32-alsa-plugins alsa-lib lib32-alsa-lib libjpeg-turbo
-    sqlite lib32-sqlite libxcomposite lib32-libxcomposite libxinerama lib32-libgcrypt libgcrypt lib32-libxinerama xdotool
-    ncurses lib32-ncurses ocl-icd lib32-ocl-icd libxslt lib32-libxslt libva lib32-libva gtk3 linux-headers firefox
-    lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader torbrowser-launcher
-    unrar sbctl os-prober
+    firefox sqlite libjpeg-turbo alsa-lib libgpg-error ncurses sbctl os-prober unrar torbrowser-launcher
   )
 
   local i3_packages=(
@@ -59,6 +53,19 @@ install_pacman_packages() {
   fi
 
   pacman -S --noconfirm --needed "${packages[@]}"
+}
+
+install_gaming_packages() {
+  local gaming_packages=(
+    nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader
+    lib32-mesa vulkan-radeon lib32-vulkan-radeon wine-staging giflib lib32-giflib libpng lib32-libpng libldap
+    lib32-libldap gnutls lib32-gnutls v4l-utils lib32-v4l-utils libpulse lib32-libpulse alsa-plugins lib32-alsa-plugins
+    alsa-lib lib32-alsa-lib sqlite lib32-sqlite libxcomposite lib32-libxcomposite ocl-icd lib32-ocl-icd libva
+    lib32-libva gtk3 lib32-gtk3 gst-plugins-base-libs lib32-gst-plugins-base-libs vulkan-icd-loader lib32-vulkan-icd-loader
+    libxinerama lib32-libxinerama lutris steam mpg123 lib32-mpg123 openal lib32-openal v4l-utils lib32-v4l-utils
+  )
+
+  pacman -S --noconfirm --needed "${gaming_packages[@]}"
 }
 
 install_aur_packages() {
@@ -332,7 +339,7 @@ if [ "$WM_CHOICE" != "dwm" ] && [ "$WM_CHOICE" != "i3" ]; then
   usage
 fi
 
-while getopts ":prscatdgkbmnh" opt; do
+while getopts ":prscatdgkbmnhG" opt; do
   case "${opt}" in
     p) install_pacman_packages ;;
     r) install_aur_packages ;;
@@ -347,6 +354,7 @@ while getopts ":prscatdgkbmnh" opt; do
     m) change_grub ;;
     n) setup_systemd_resolved ;;
     h) disable_telemetry ;;
+    G) install_gaming_packages ;;
     *) usage ;;
   esac
 done
