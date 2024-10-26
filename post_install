@@ -39,7 +39,7 @@ install_pacman_packages() {
   local common_packages=(
     ttf-font-awesome tmux dmenu xclip noto-fonts-emoji mpv yt-dlp ttf-cascadia-code gdb scrot pavucontrol python-pip
     xorg xorg-xinput xorg-xinit slock dconf wget libx11 libxinerama libxft freetype2 fuse openssh dnsmasq zip
-    firefox sqlite libjpeg-turbo alsa-lib libgpg-error ncurses sbctl os-prober unrar torbrowser-launcher
+    firefox sqlite libjpeg-turbo alsa-lib libgpg-error ncurses sbctl os-prober unrar torbrowser-launcher network-manager-applet
   )
 
   local i3_packages=(
@@ -150,6 +150,9 @@ install_suckless_software() {
 }
 
 copy_dotfiles() {
+  if [ "$WM_CHOICE" = "i3" ]; then
+    sed -i 's/exec dwm/nm-applet \&\nexec i3/' /home/$SUDO_USER/dotfiles/.xinitrc
+  fi
   find . -maxdepth 1 -type f -name ".*" ! -name ".bashrc" ! -name ".gitignore" -exec cp -u {} /home/$SUDO_USER/ \;
   if ! grep -q MYCONFIG "/home/$SUDO_USER/.bashrc"; then
     cat .bashrc >> /home/$SUDO_USER/.bashrc
@@ -181,7 +184,7 @@ download_softwares() {
   wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
   
   curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
-  curl -L -o discord.tar.gz https://discord.com/api/download?platform=linux&format=tar.gz
+  wget --content-disposition -O discord.tar.gz --user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36\" \"https://discord.com/api/download?platform=linux&format=tar.gz\"
   tar xzf discord.tar.gz
   mkdir -p ~/.local/bin
   chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
@@ -277,6 +280,7 @@ run_all_options() {
   # secure_boot
   setup_systemd_resolved
   disable_telemetry
+  disable_post_install_service
 }
 
 setup_systemd_resolved() {
@@ -325,6 +329,11 @@ disable_telemetry() {
 0.0.0.0 public-data-api.mihoyo.com
 0.0.0.0 log-upload.mihoyo.com
 EOF
+}
+
+disable_post_install_service() {
+  systemctl disable $SUDO_USER-post-install.service
+  echo "Post-install service has been disabled."
 }
 
 if [[ $EUID -ne 0 ]]; then
