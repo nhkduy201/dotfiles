@@ -10,11 +10,29 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-USERNAME="kayd"
 HOSTNAME="archlinux"
 TIMEZONE="Asia/Ho_Chi_Minh"
-WM_CHOICE="dwm"  # or "i3"
-PASSWORD="password"  # Note: In production, should prompt for password
+
+# Function to display usage
+usage() {
+    cat << EOF
+Usage: $0 -u USERNAME -w WM_CHOICE -p PASSWORD [-h HOSTNAME] [-t TIMEZONE]
+
+Required arguments:
+    -u USERNAME      Username for the new system
+    -w WM_CHOICE     Window manager choice (dwm or i3)
+    -p PASSWORD      Password for both root and user
+
+Optional arguments:
+    -h HOSTNAME      Hostname for the new system (default: archlinux)
+    -t TIMEZONE      Timezone (default: Asia/Ho_Chi_Minh)
+    -? or --help     Display this help message
+
+Example:
+    $0 -u kayd -w dwm -p mypassword -h myarch -t Asia/Tokyo
+EOF
+    exit 1
+}
 
 # Function to log messages
 log() {
@@ -26,6 +44,39 @@ error() {
     echo -e "${RED}Error: $1${NC}" >&2
     exit 1
 }
+
+# Parse command line arguments
+while getopts ":u:w:p:h:t:?" opt; do
+    case $opt in
+        u)
+            USERNAME="$OPTARG"
+            ;;
+        w)
+            WM_CHOICE="$OPTARG"
+            if [[ "$WM_CHOICE" != "dwm" && "$WM_CHOICE" != "i3" ]]; then
+                error "Window manager must be either 'dwm' or 'i3'"
+            fi
+            ;;
+        p)
+            PASSWORD="$OPTARG"
+            ;;
+        h)
+            HOSTNAME="$OPTARG"
+            ;;
+        t)
+            TIMEZONE="$OPTARG"
+            ;;
+        \?|*)
+            usage
+            ;;
+    esac
+done
+
+# Check required arguments
+if [ -z "$USERNAME" ] || [ -z "$WM_CHOICE" ] || [ -z "$PASSWORD" ]; then
+    error "Missing required arguments"
+    usage
+fi
 
 # Check if script is run as root
 if [[ $EUID -ne 0 ]]; then
@@ -40,6 +91,11 @@ else
 fi
 
 log "Starting Arch Linux installation in $BOOT_MODE mode..."
+log "Installation parameters:"
+log "  Username: $USERNAME"
+log "  Hostname: $HOSTNAME"
+log "  Window Manager: $WM_CHOICE"
+log "  Timezone: $TIMEZONE"
 
 # Update system clock
 timedatectl set-ntp true
