@@ -75,7 +75,7 @@ EOF
 arch-chroot /mnt/archinstall systemctl enable $MY_USER-post-install.service
 
 # Correctly add a sudoers rule
-arch-chroot /mnt/archinstall bash -c "echo \"$MY_USER ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/00_nopasswd"
+arch-chroot /mnt/archinstall bash -c "echo \"$MY_USER ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$MY_USER/dotfiles/l5p-kbl/l5p_kbl.py\n$MY_USER ALL=(ALL:ALL) NOPASSWD: /usr/bin/find\" > /etc/sudoers.d/00_nopasswd"
 
 # Change ownership
 arch-chroot /mnt/archinstall bash -c "chown -R $MY_USER:$MY_USER /home/$MY_USER/"
