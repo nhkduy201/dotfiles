@@ -19,6 +19,4 @@ function Set-GoogleDNS {
 
     Write-Host "DNS settings updated successfully."
 }
-
-# Call the function with Google's DNS servers
 Set-GoogleDNS -IPv4Servers @("8.8.8.8", "8.8.4.4") -IPv6Servers @("2001:4860:4860::8888", "2001:4860:4860::8844")
