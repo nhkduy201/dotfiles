@@ -117,36 +117,146 @@ log "  Target Disk: $DISK"
 # Update system clock
 timedatectl set-ntp true
 
-# Function to handle dual-boot partitioning
+# Function to detect existing OS installations
+detect_existing_os() {
+    local disk=$1
+    local os_found=false
+    local efi_part=""
+    
+    # Check if disk has GPT partition table
+    if ! fdisk -l "$disk" | grep -q "GPT"; then
+        error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
+    }
+    
+    # Look for EFI partition
+    efi_part=$(fdisk -l "$disk" | grep "EFI System" | awk '{print $1}')
+    if [ -z "$efi_part" ]; then
+        error "No EFI partition found. Existing OS must be installed in UEFI mode."
+    }
+    
+    # Mount EFI partition temporarily to check its contents
+    local tmp_mount="/tmp/efi_check"
+    mkdir -p "$tmp_mount"
+    if mount "$efi_part" "$tmp_mount"; then
+        # Check for Windows boot manager
+        if [ -d "$tmp_mount/EFI/Microsoft" ]; then
+            log "Detected Windows installation"
+            os_found=true
+        fi
+        
+        # Check for other Linux distributions
+        if [ -d "$tmp_mount/EFI/ubuntu" ] || [ -d "$tmp_mount/EFI/fedora" ] || [ -d "$tmp_mount/EFI/debian" ]; then
+            log "Detected other Linux distribution"
+            os_found=true
+        fi
+        
+        # Check for macOS
+        if [ -d "$tmp_mount/EFI/Apple" ]; then
+            log "Detected macOS installation"
+            os_found=true
+        fi
+        
+        umount "$tmp_mount"
+    fi
+    rm -r "$tmp_mount"
+    
+    if [ "$os_found" = false ]; then
+        log "Warning: No common OS boot files found, but proceeding with dual-boot setup"
+    fi
+    
+    echo "$efi_part"
+}
+
+# Function to find largest free space on disk
+find_free_space() {
+    local disk=$1
+    local start_sector=0
+    local size_sectors=0
+    
+    # Get free space information using parted
+    parted "$disk" unit s print free | grep "Free Space" | while read -r line; do
+        local curr_start=$(echo "$line" | awk '{print $1}' | tr -d 's')
+        local curr_size=$(echo "$line" | awk '{print $3}' | tr -d 's')
+        if [ "$curr_size" -gt "$size_sectors" ]; then
+            start_sector=$curr_start
+            size_sectors=$curr_size
+        fi
+    done
+    
+    echo "$start_sector $size_sectors"
+}
+
+# Enhanced dual-boot setup function
 setup_dual_boot() {
     local disk=$1
     
-    # Check if Windows is installed in UEFI mode
     if [ "$BOOT_MODE" = "UEFI" ]; then
-        # Check for existing EFI partition
-        local efi_part=$(fdisk -l "$disk" | grep "EFI System" | awk '{print $1}')
-        if [ -z "$efi_part" ]; then
-            error "No EFI partition found. Make sure Windows is installed in UEFI mode."
-        fi
+        # Detect existing OS and EFI partition
+        EFI_PART=$(detect_existing_os "$disk")
+        log "Using existing EFI partition: $EFI_PART"
         
-        log "Using existing EFI partition: $efi_part"
+        # Install required tools for partition management
+        pacman -Sy --noconfirm parted
+
+        # Find largest free space
+        read -r start_sector size_sectors < <(find_free_space "$disk")
+        
+        if [ "$size_sectors" -lt 20971520 ]; then  # Minimum 10GB (in sectors)
+            error "Not enough free space for Arch Linux installation (minimum 10GB required)"
+        fi
         
         # Create root partition in the free space
         log "Creating root partition in available space..."
         (
-            echo n  # new partition
-            echo    # default partition number
-            echo    # default first sector
-            echo    # default last sector (rest of disk)
-            echo    # no need to remove signature
-            echo w  # write changes
-        ) | fdisk "$disk"
+            echo n    # new partition
+            echo p    # primary partition
+            echo     # default partition number
+            echo     # default first sector
+            echo     # use rest of disk
+            echo t    # change partition type
+            echo     # select last partition
+            echo 23   # Linux root (x86-64)
+            echo w    # write changes
+        ) | fdisk "$disk" || error "Failed to create root partition"
         
         # Get the number of the newly created root partition
-        ROOT_PART=$(fdisk -l "$disk" | tail -n 1 | awk '{print $1}')
-        EFI_PART="$efi_part"
+        ROOT_PART=$(fdisk -l "$disk" | grep "Linux root (x86-64)" | tail -n 1 | awk '{print $1}')
+        
+        # Verify partitions exist
+        if [ ! -e "$ROOT_PART" ] || [ ! -e "$EFI_PART" ]; then
+            error "Failed to create or identify required partitions"
+        fi
+        
+        # Update partition table
+        partprobe "$disk"
+        
+        log "Created root partition: $ROOT_PART"
     else
         error "Legacy BIOS dual-boot is not supported. Please install in UEFI mode."
+    fi
+}
+
+# Enhanced mount function
+mount_partitions() {
+    log "Mounting root partition: $ROOT_PART"
+    if ! mount "$ROOT_PART" /mnt; then
+        error "Failed to mount root partition"
+    fi
+
+    if [ "$INSTALL_MODE" = "dual" ]; then
+        log "Mounting EFI partition: $EFI_PART"
+        mkdir -p /mnt/boot/efi
+        if ! mount "$EFI_PART" /mnt/boot/efi; then
+            umount /mnt
+            error "Failed to mount EFI partition"
+        fi
+    else
+        log "Mounting boot partition: $EFI_PART"
+        mkdir -p /mnt/boot
+        if ! mount "$EFI_PART" /mnt/boot; then
+            umount /mnt
+            error "Failed to mount boot partition"
+        fi
     fi
 }
 
@@ -228,14 +338,8 @@ else
 fi
 mkfs.ext4 "$ROOT_PART"
 
-# Mount partitions
-mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot
-if [ "$INSTALL_MODE" = "dual" ]; then
-    mount --mkdir "$EFI_PART" /mnt/boot/efi
-else
-    mount "$EFI_PART" /mnt/boot
-fi
+# Use the enhanced mount function
+mount_partitions
 
 # Rest of the installation script remains the same until bootloader configuration
 # [Previous mirror configuration and base system installation code remains unchanged]
