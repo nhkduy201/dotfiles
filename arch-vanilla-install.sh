@@ -2,6 +2,7 @@
 
 # Exit on any error
 set -e
+trap 'error "An error occurred at line $LINENO. Exiting..."' ERR
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,6 +47,146 @@ log() {
 error() {
     echo -e "${RED}Error: $1${NC}" >&2
     exit 1
+}
+
+# Function to install AUR helper and packages
+install_aur_packages() {
+    local aur_helper=""
+    if ! command -v paru &>/dev/null; then
+        sudo -u $USERNAME git clone https://aur.archlinux.org/paru.git
+        (cd paru && sudo -u $USERNAME makepkg -s --noconfirm --needed && pacman -U --noconfirm *.pkg.tar.zst)
+        if ! command -v paru &>/dev/null; then
+            log "Paru installation failed. Falling back to yay."
+            sudo -u $USERNAME git clone https://aur.archlinux.org/yay.git
+            (cd yay && sudo -u $USERNAME makepkg -s --noconfirm --needed && pacman -U --noconfirm *.pkg.tar.zst)
+            aur_helper="yay"
+        else
+            aur_helper="paru"
+        fi
+    else
+        aur_helper="paru"
+    fi
+
+    local common_aur_packages=(
+        microsoft-edge-stable-bin
+        ibus-bamboo
+        linux-wifi-hotspot
+        nm-vpngate-git
+        lf
+        ripgrep
+    )
+
+    local i3_aur_packages=(i3-gaps)
+
+    if [ "$WM_CHOICE" = "dwm" ]; then
+        aur_packages=("${common_aur_packages[@]}")
+    else
+        aur_packages=("${common_aur_packages[@]}" "${i3_aur_packages[@]}")
+    fi
+
+    sudo -u $USERNAME $aur_helper -S --noconfirm --needed "${aur_packages[@]}"
+}
+
+# Function to install gaming-related packages
+install_gaming_packages() {
+    local gaming_packages=(
+        nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings
+        vulkan-icd-loader lib32-vulkan-icd-loader
+        lib32-mesa vulkan-radeon lib32-vulkan-radeon
+        wine-staging giflib lib32-giflib libpng lib32-libpng
+        libldap lib32-libldap gnutls lib32-gnutls
+        libpulse lib32-libpulse alsa-plugins lib32-alsa-plugins
+        lutris steam mpg123 lib32-mpg123 openal lib32-openal
+    )
+    pacman -S --noconfirm --needed "${gaming_packages[@]}"
+}
+
+# Function to install suckless software
+install_suckless_software() {
+    local softwares=("dwm" "st" "slstatus-git")
+    for sw in "${softwares[@]}"; do
+        if [[ ! -d $sw ]]; then
+            sudo -u $USERNAME paru -G "${sw}"
+        fi
+        cp "${sw}-config.h" "${sw}/config.h"
+        insert_sed_command_before_make "${sw}"
+        cd "${sw}"
+        sudo -u $USERNAME makepkg -si --noconfirm
+        cd ..
+    done
+}
+
+insert_sed_command_before_make() {
+    local sw="$1"
+    local build_line_number=$(grep -n '^build() {' "${sw}/PKGBUILD" | cut -d: -f1)
+    if [[ -z "$build_line_number" ]]; then
+        return 1
+    fi
+    local make_line_number=$(tail -n +"$((build_line_number+1))" "${sw}/PKGBUILD" | grep -n '^ *make' | head -n 1 | cut -d: -f1)
+    if [[ -z "$make_line_number" ]]; then
+        return 1
+    fi
+    local insert_line_number=$(( make_line_number + build_line_number ))
+    sed_command=""
+    if [[ $sw == "dwm" ]]; then
+        sed_command="sed -E -i 's#^CFLAGS\\s*=#CFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    elif [[ $sw == "st" ]]; then
+        sed_command="sed -E -i 's#^STCFLAGS\\s*=#STCFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    elif [[ $sw == "slstatus-git" ]]; then
+        sed_command="sed -E -i 's#^CFLAGS\\s*=#CFLAGS = -O3 -march=native#' \$(find . -name config.mk)"
+    fi
+    sed_command="${sed_command} && sed -E -i 's#-Os##g' \$(find . -name config.mk)"
+    sed -i "${insert_line_number}i\  ${sed_command}" "${sw}/PKGBUILD"
+}
+
+# Function to setup touchpad
+setup_touchpad() {
+    cat > /etc/X11/xorg.conf.d/30-touchpad.conf << EOF
+Section "InputClass"
+    Identifier "touchpad"
+    Driver "libinput"
+    MatchIsTouchpad "on"
+    Option "Tapping" "on"
+    Option "TappingButtonMap" "lrm"
+    Option "NaturalScrolling" "true"
+    Option "ScrollMethod" "twofinger"
+EndSection
+EOF
+}
+
+# Function to configure git
+setup_git() {
+    sudo -u $USERNAME git config --global user.email "nhkduy201@gmail.com"
+    sudo -u $USERNAME git config --global user.name "nhkduy201"
+    sudo -u $USERNAME git config --global core.editor "nvim"
+}
+
+# Function to download softwares
+download_softwares() {
+    local PROTONUP_VERSION="2.9.1"
+    sudo -u $USERNAME bash -c "
+        mkdir -p ~/Downloads
+        cd ~/Downloads
+        wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
+        curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
+        wget --content-disposition -O discord.tar.gz \"https://discord.com/api/download?platform=linux&format=tar.gz\"
+        tar xzf discord.tar.gz
+        mkdir -p ~/.local/bin
+        chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
+        ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
+        ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
+    "
+    ln -sf /home/$USERNAME/Downloads/cursor-*x86_64.AppImage /usr/local/bin/cursor
+}
+
+# Add after download_softwares function
+keyboard_backlight() {
+    arch-chroot /mnt bash -c "
+        cd /home/$USERNAME
+        sudo -u $USERNAME git clone https://github.com/imShara/l5p-kbl
+        cd l5p-kbl
+        sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p_kbl.py
+    "
 }
 
 # Parse command line arguments
@@ -341,8 +482,62 @@ mkfs.ext4 "$ROOT_PART"
 # Use the enhanced mount function
 mount_partitions
 
-# Rest of the installation script remains the same until bootloader configuration
-# [Previous mirror configuration and base system installation code remains unchanged]
+# Setup mirrorlist for Asian countries
+log "Configuring mirrors..."
+cat > /etc/pacman.d/mirrorlist << EOF
+## Singapore
+Server = https://mirror.jingk.ai/archlinux/\$repo/os/\$arch
+Server = https://mirror.aktkn.sg/archlinux/\$repo/os/\$arch
+
+## Japan
+Server = https://mirrors.cat.net/archlinux/\$repo/os/\$arch
+Server = https://ftp.jaist.ac.jp/pub/Linux/ArchLinux/\$repo/os/\$arch
+
+## South Korea
+Server = https://mirror.funami.tech/arch/\$repo/os/\$arch
+Server = https://ftp.lanet.kr/pub/archlinux/\$repo/os/\$arch
+
+## Hong Kong
+Server = https://mirror.xtom.com.hk/archlinux/\$repo/os/\$arch
+EOF
+
+# Enable parallel downloads
+sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
+
+# Enable multilib repository
+sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
+
+# Update package database
+pacman -Sy
+
+# Install base system
+log "Installing base system..."
+pacstrap /mnt base base-devel linux linux-firmware git gvim \
+    networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
+    xorg xorg-xinit xorg-xinput \
+    pipewire pipewire-alsa pipewire-pulse \
+    firefox tmux dmenu xclip pavucontrol python-pip \
+    ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
+    slock dconf wget libx11 libxinerama libxft freetype2 \
+    fuse openssh dnsmasq zip unrar torbrowser-launcher \
+    mpv yt-dlp gdb scrot sqlite sbctl os-prober \
+    grub efibootmgr \
+    $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock")
+
+# Generate fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Configure secure boot if in UEFI mode
+if [ "$BOOT_MODE" = "UEFI" ]; then
+    if [ -d /sys/firmware/efi/efivars ]; then
+        sbctl create-keys
+        sbctl enroll-keys -m
+        sbctl sign -s /boot/vmlinuz-linux
+    fi
+fi
+
+# Create configuration script
+log "Creating configuration script..."
 
 # Modify the bootloader installation in setup.sh
 cat > /mnt/setup.sh << 'EOF'
@@ -357,11 +552,34 @@ WM_CHOICE="$4"
 PASSWORD="$5"
 INSTALL_MODE="$6"
 
-# [Previous system configuration code remains unchanged until bootloader installation]
+# Basic system configuration
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "$HOSTNAME" > /etc/hostname
+
+# Configure hosts
+cat > /etc/hosts << EOHOST
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $HOSTNAME.localdomain $HOSTNAME
+EOHOST
+
+# Set root password
+echo "root:$PASSWORD" | chpasswd
+
+# Create user
+useradd -m -G wheel -s /bin/bash $USERNAME
+echo "$USERNAME:$PASSWORD" | chpasswd
+
+# Configure sudo
+echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
 
 # Install and configure bootloader
 if [ -d /sys/firmware/efi/efivars ]; then
-    pacman -S --noconfirm grub efibootmgr os-prober
     if [ "$INSTALL_MODE" = "dual" ]; then
         # Configure for dual boot
         mkdir -p /boot/efi
@@ -377,11 +595,68 @@ else
 fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# [Rest of the setup script remains unchanged]
+# Enable services
+systemctl enable NetworkManager
+systemctl enable systemd-resolved
+
+# Configure initial window manager
+if [ "$WM_CHOICE" = "i3" ]; then
+    mkdir -p /home/$USERNAME/.config/i3
+    echo "exec i3" > /home/$USERNAME/.xinitrc
+else
+    echo "exec dwm" > /home/$USERNAME/.xinitrc
+fi
+
+# Set correct ownership
+chown -R $USERNAME:$USERNAME /home/$USERNAME
+
 EOF
 
 # Make setup script executable
 chmod +x /mnt/setup.sh
+
+# Setup additional configurations
+log "Setting up additional configurations..."
+arch-chroot /mnt bash -c "
+    setup_touchpad
+    setup_git
+    install_gaming_packages
+    install_aur_packages
+    download_softwares
+    keyboard_backlight
+    if [ \"$WM_CHOICE\" = \"dwm\" ]; then
+        install_suckless_software
+    fi
+"
+
+# Change GRUB timeout
+arch-chroot /mnt bash -c "
+    sed -i 's/GRUB_TIMEOUT=5/GRUB_TIMEOUT=1/' /etc/default/grub
+    grub-mkconfig -o /boot/grub/grub.cfg
+"
+
+# Configure systemd-resolved
+arch-chroot /mnt bash -c "
+    systemctl enable systemd-resolved --now
+    ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+    cat > /etc/systemd/resolved.conf << EOF
+DNS=8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844
+FallbackDNS=1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001
+DNSOverTLS=yes
+EOF
+    systemctl restart systemd-resolved
+"
+
+# Disable telemetry
+cat >> /mnt/etc/hosts << EOF
+## For an-anime-game-launcher-bin
+0.0.0.0 sg-public-data-api.hoyoverse.com
+0.0.0.0 log-upload-os.hoyoverse.com
+0.0.0.0 log-upload-os.mihoyo.com
+0.0.0.0 overseauspider.yuanshen.com
+0.0.0.0 public-data-api.mihoyo.com
+0.0.0.0 log-upload.mihoyo.com
+EOF
 
 # Chroot and run setup
 log "Running system configuration..."
@@ -398,6 +673,3 @@ log "Installation complete! You can now reboot."
 log "After reboot:"
 log "1. Log in as $USERNAME"
 log "2. Run 'startx' to start the graphical environment"
-if [ "$WM_CHOICE" = "dwm" ]; then
-    log "3. You'll need to build and install dwm, st, and slstatus from source"
-fi
