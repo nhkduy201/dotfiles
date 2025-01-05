@@ -428,22 +428,26 @@ setup_dual_boot() {
         log "Creating root partition in available space..."
         (
             echo n    # new partition
-            echo p    # primary partition
+            echo     # default partition type (primary)
             echo     # default partition number
             echo     # default first sector
             echo     # use rest of disk
             echo t    # change partition type
-            echo 1    # select last partition
+            echo     # select last partition (automatically selects the new one)
             echo 23   # Linux root (x86-64)
             echo w    # write changes
         ) | fdisk "$disk" || error "Failed to create root partition"
         
         # Get the number of the newly created root partition
-        ROOT_PART=$(fdisk -l "$disk" | grep "Linux root (x86-64)" | tail -n 1 | awk '{print $1}')
+        ROOT_PART=$(fdisk -l "$disk" | grep "Linux root" | tail -n 1 | awk '{print $1}')
         
-        # Verify partitions exist
-        if [ ! -e "$ROOT_PART" ] || [ ! -e "$EFI_PART" ]; then
-            error "Failed to create or identify required partitions"
+        # Verify both partitions exist and have correct types
+        if ! fdisk -l "$disk" | grep -q "EFI System"; then
+            error "EFI System partition not found or has incorrect type"
+        fi
+        
+        if [ ! -e "$ROOT_PART" ]; then
+            error "Failed to create root partition"
         fi
         
         # Update partition table
