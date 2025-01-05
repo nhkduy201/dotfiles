@@ -10,10 +10,18 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Install required packages for logging
+pacman -Sy --noconfirm curl netcat
+
 # Default values
 HOSTNAME="archlinux"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean" # New default value for installation mode
+
+# Function to display log messages
+log() {
+    echo -e "${GREEN}$1${NC}"
+}
 
 # Function to upload logs to termbin
 upload_log() {
@@ -44,8 +52,11 @@ error() {
     local script_name=$(basename "$0")
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
-    # Create detailed error log
-    local log_content="
+    echo -e "${RED}Error: $error_msg${NC}" >&2
+    
+    # Only try to upload if curl and netcat are available
+    if command -v curl >/dev/null 2>&1 && command -v nc >/dev/null 2>&1; then
+        local log_content="
 === Error Report ===
 Timestamp: $timestamp
 Script: $script_name
@@ -56,29 +67,12 @@ Message: $error_msg
 Kernel: $(uname -r)
 Architecture: $(uname -m)
 Boot Mode: $BOOT_MODE
-Installation Mode: $INSTALL_MODE
+Installation Mode: $INSTALL_MODE"
 
-=== Script Parameters ===
-Username: $USERNAME
-Hostname: $HOSTNAME
-Window Manager: $WM_CHOICE
-Timezone: $TIMEZONE
-Target Disk: $DISK
-
-=== Last 50 lines of script execution ===
-$(tail -n 50 /var/log/arch-install.log 2>/dev/null || echo "No log file found")
-"
-    
-    # Try to upload the log
-    local url=$(upload_log "$log_content")
-    
-    # Display error message and log URL
-    echo -e "${RED}Error: $error_msg${NC}" >&2
-    if [ $? -eq 0 ]; then
-        echo -e "${RED}Error details have been uploaded to: $url${NC}" >&2
-    else
-        echo -e "${RED}Failed to upload error log. Error details:${NC}" >&2
-        echo -e "$log_content" >&2
+        local url=$(upload_log "$log_content")
+        if [ $? -eq 0 ]; then
+            echo -e "${RED}Error details have been uploaded to: $url${NC}" >&2
+        fi
     fi
     
     exit 1
@@ -109,11 +103,6 @@ Example:
     $0 -u kayd -w dwm -p mypassword -h myarch -t Asia/Tokyo -m dual -d /dev/sda
 EOF
     exit 1
-}
-
-# Function to log messages
-log() {
-    echo -e "${GREEN}$1${NC}"
 }
 
 # Function to install AUR helper and packages
@@ -334,13 +323,13 @@ detect_existing_os() {
     # Check if disk has GPT partition table
     if ! fdisk -l "$disk" | grep -q "GPT"; then
         error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
-    }
+    fi
     
     # Look for EFI partition
     efi_part=$(fdisk -l "$disk" | grep "EFI System" | awk '{print $1}')
     if [ -z "$efi_part" ]; then
         error "No EFI partition found. Existing OS must be installed in UEFI mode."
-    }
+    fi
     
     # Mount EFI partition temporarily to check its contents
     local tmp_mount="/tmp/efi_check"
@@ -380,18 +369,21 @@ find_free_space() {
     local disk=$1
     local start_sector=0
     local size_sectors=0
+    local largest_start=0
+    local largest_size=0
     
-    # Get free space information using parted
-    parted "$disk" unit s print free | grep "Free Space" | while read -r line; do
-        local curr_start=$(echo "$line" | awk '{print $1}' | tr -d 's')
-        local curr_size=$(echo "$line" | awk '{print $3}' | tr -d 's')
-        if [ "$curr_size" -gt "$size_sectors" ]; then
-            start_sector=$curr_start
-            size_sectors=$curr_size
+    while read -r line; do
+        if [[ $line =~ "Free Space" ]]; then
+            local curr_start=$(echo "$line" | awk '{print $1}' | tr -d 's')
+            local curr_size=$(echo "$line" | awk '{print $3}' | tr -d 's')
+            if [ "$curr_size" -gt "$largest_size" ]; then
+                largest_start=$curr_start
+                largest_size=$curr_size
+            fi
         fi
-    done
+    done < <(parted "$disk" unit s print free)
     
-    echo "$start_sector $size_sectors"
+    echo "$largest_start $largest_size"
 }
 
 # Enhanced dual-boot setup function
@@ -422,7 +414,7 @@ setup_dual_boot() {
             echo     # default first sector
             echo     # use rest of disk
             echo t    # change partition type
-            echo     # select last partition
+            echo 1    # select last partition
             echo 23   # Linux root (x86-64)
             echo w    # write changes
         ) | fdisk "$disk" || error "Failed to create root partition"
@@ -685,6 +677,7 @@ chmod +x /mnt/setup.sh
 # Setup additional configurations
 log "Setting up additional configurations..."
 arch-chroot /mnt bash -c "
+    bash -c '$(declare -f setup_touchpad setup_git install_gaming_packages install_aur_packages download_softwares keyboard_backlight install_suckless_software)'
     setup_touchpad
     setup_git
     install_gaming_packages
