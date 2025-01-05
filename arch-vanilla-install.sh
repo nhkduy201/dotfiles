@@ -339,8 +339,8 @@ detect_existing_os() {
     local os_found=false
     local efi_part=""
     
-    # Check if disk has GPT partition table
-    if ! fdisk -l "$disk" | grep -q "GPT"; then
+    # Check if disk has GPT partition table (improved detection)
+    if ! parted "$disk" print | grep -q "Partition Table: gpt"; then
         error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
     fi
     
@@ -752,6 +752,3 @@ log "Installation complete! You can now reboot."
 log "After reboot:"
 log "1. Log in as $USERNAME"
 log "2. Run 'startx' to start the graphical environment"
-
-# Add these packages to your initial pacman installation
-pacman -Sy --noconfirm curl netcat
