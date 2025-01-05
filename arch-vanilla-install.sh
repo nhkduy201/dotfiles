@@ -441,7 +441,8 @@ setup_dual_boot() {
     
     if [ "$BOOT_MODE" = "UEFI" ]; then
         # Detect existing OS and EFI partition
-        EFI_PART=$(detect_existing_os "$disk")
+        local detected_efi=$(detect_existing_os "$disk")
+        EFI_PART="$detected_efi"  # Set global variable
         log "Using existing EFI partition: $EFI_PART"
         
         # Check for existing Linux partition
@@ -457,41 +458,30 @@ setup_dual_boot() {
                 error "Linux partition too small (minimum 10GB required)"
             fi
         else
-            # Find largest free space and create partition only if no Linux partition exists
-            read -r start_sector size_sectors < <(find_free_space "$disk")
-            
-            if [ "$size_sectors" -lt 20971520 ]; then  # Minimum 10GB (in sectors)
-                error "Not enough free space for Arch Linux installation (minimum 10GB required)"
-            fi
-            
-            # Create root partition in the free space
-            log "Creating root partition in available space..."
-            (
-                echo n    # new partition
-                echo     # default partition type (primary)
-                echo     # default partition number
-                echo     # default first sector
-                echo     # use rest of disk
-                echo t    # change partition type
-                echo     # select last partition
-                echo 23   # Linux root (x86-64)
-                echo w    # write changes
-            ) | fdisk "$disk" || error "Failed to create root partition"
-            
-            # Get the newly created root partition
-            ROOT_PART=$(fdisk -l "$disk" | grep "Linux filesystem\|Linux root" | tail -n 1 | awk '{print $1}')
+            error "No Linux partition found"
         fi
         
-        # Verify both partitions exist
-        if [ ! -e "$EFI_PART" ]; then
-            error "EFI partition not found"
+        # Debug output
+        log "Debug: EFI_PART=$EFI_PART"
+        log "Debug: ROOT_PART=$ROOT_PART"
+        
+        # Verify both partitions exist and are accessible
+        if [ ! -e "$EFI_PART" ] || [ ! -b "$EFI_PART" ]; then
+            error "EFI partition not found or not accessible: $EFI_PART"
         fi
         
-        if [ ! -e "$ROOT_PART" ]; then
-            error "Root partition not found"
+        if [ ! -e "$ROOT_PART" ] || [ ! -b "$ROOT_PART" ]; then
+            error "Root partition not found or not accessible: $ROOT_PART"
         fi
         
-        log "Created/Found root partition: $ROOT_PART"
+        # Verify EFI partition is properly formatted
+        if ! blkid "$EFI_PART" | grep -q "vfat"; then
+            error "EFI partition is not formatted as vfat: $EFI_PART"
+        fi
+        
+        log "Verified partitions:"
+        log "  EFI: $EFI_PART"
+        log "  Root: $ROOT_PART"
     else
         error "Legacy BIOS dual-boot is not supported. Please install in UEFI mode."
     fi
