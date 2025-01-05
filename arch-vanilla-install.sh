@@ -339,7 +339,7 @@ detect_existing_os() {
     local os_found=false
     local efi_part=""
     
-    # Check if disk has GPT partition table (improved detection)
+    # Check if disk has GPT partition table
     if ! parted "$disk" print | grep -q "Partition Table: gpt"; then
         error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
     fi
@@ -410,7 +410,8 @@ detect_existing_os() {
         ) | fdisk "$disk"
     fi
     
-    echo "$efi_part"
+    # Return only the partition path, without any log messages
+    printf "%s" "$efi_part"
 }
 
 # Function to find largest free space on disk
