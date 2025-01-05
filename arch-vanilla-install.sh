@@ -15,6 +15,79 @@ HOSTNAME="archlinux"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean" # New default value for installation mode
 
+# Function to upload logs to termbin
+upload_log() {
+    local log_content="$1"
+    local upload_url="https://termbin.com"
+    
+    # Try to upload to termbin
+    local url=$(echo "$log_content" | nc termbin.com 9999)
+    if [[ $url =~ ^https?:// ]]; then
+        echo "Log uploaded to: $url"
+        return 0
+    fi
+    
+    # Fallback to ix.io if termbin fails
+    url=$(echo "$log_content" | curl -F 'f:1=<-' ix.io)
+    if [[ $url =~ ^https?:// ]]; then
+        echo "Log uploaded to: $url"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Enhanced error handling with log upload
+error() {
+    local error_msg="$1"
+    local line_no="$LINENO"
+    local script_name=$(basename "$0")
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Create detailed error log
+    local log_content="
+=== Error Report ===
+Timestamp: $timestamp
+Script: $script_name
+Error at line: $line_no
+Message: $error_msg
+
+=== System Information ===
+Kernel: $(uname -r)
+Architecture: $(uname -m)
+Boot Mode: $BOOT_MODE
+Installation Mode: $INSTALL_MODE
+
+=== Script Parameters ===
+Username: $USERNAME
+Hostname: $HOSTNAME
+Window Manager: $WM_CHOICE
+Timezone: $TIMEZONE
+Target Disk: $DISK
+
+=== Last 50 lines of script execution ===
+$(tail -n 50 /var/log/arch-install.log 2>/dev/null || echo "No log file found")
+"
+    
+    # Try to upload the log
+    local url=$(upload_log "$log_content")
+    
+    # Display error message and log URL
+    echo -e "${RED}Error: $error_msg${NC}" >&2
+    if [ $? -eq 0 ]; then
+        echo -e "${RED}Error details have been uploaded to: $url${NC}" >&2
+    else
+        echo -e "${RED}Failed to upload error log. Error details:${NC}" >&2
+        echo -e "$log_content" >&2
+    fi
+    
+    exit 1
+}
+
+# Start logging
+exec 1> >(tee -a /var/log/arch-install.log)
+exec 2> >(tee -a /var/log/arch-install.log >&2)
+
 # Function to display usage
 usage() {
     cat << EOF
@@ -41,12 +114,6 @@ EOF
 # Function to log messages
 log() {
     echo -e "${GREEN}$1${NC}"
-}
-
-# Function to handle errors
-error() {
-    echo -e "${RED}Error: $1${NC}" >&2
-    exit 1
 }
 
 # Function to install AUR helper and packages
@@ -673,3 +740,6 @@ log "Installation complete! You can now reboot."
 log "After reboot:"
 log "1. Log in as $USERNAME"
 log "2. Run 'startx' to start the graphical environment"
+
+# Add these packages to your initial pacman installation
+pacman -Sy --noconfirm curl netcat
