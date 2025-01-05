@@ -344,8 +344,27 @@ detect_existing_os() {
         error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
     fi
     
-    # Look for EFI partition
+    # Look for EFI partition using multiple methods
+    # First try fdisk
     efi_part=$(fdisk -l "$disk" | grep "EFI System" | awk '{print $1}')
+    
+    # If not found, try parted
+    if [ -z "$efi_part" ]; then
+        local efi_number=$(parted "$disk" print | grep "EFI system partition" | awk '{print $1}')
+        if [ -n "$efi_number" ]; then
+            if [[ "$disk" == *"nvme"* ]]; then
+                efi_part="${disk}p${efi_number}"
+            else
+                efi_part="${disk}${efi_number}"
+            fi
+        fi
+    fi
+    
+    # If still not found, try looking for vfat partition
+    if [ -z "$efi_part" ]; then
+        efi_part=$(lsblk -f "$disk" -o NAME,FSTYPE | grep "vfat" | head -n1 | awk '{print "/dev/"$1}')
+    fi
+    
     if [ -z "$efi_part" ]; then
         error "No EFI partition found. Existing OS must be installed in UEFI mode."
     fi
@@ -378,6 +397,17 @@ detect_existing_os() {
     
     if [ "$os_found" = false ]; then
         log "Warning: No common OS boot files found, but proceeding with dual-boot setup"
+    fi
+    
+    # Fix partition type if needed
+    if ! fdisk -l "$disk" | grep -q "EFI System"; then
+        log "Fixing EFI partition type..."
+        (
+            echo t    # change partition type
+            echo 1    # select first partition
+            echo 1    # EFI System type
+            echo w    # write changes
+        ) | fdisk "$disk"
     fi
     
     echo "$efi_part"
