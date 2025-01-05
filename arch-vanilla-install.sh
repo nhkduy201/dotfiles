@@ -56,6 +56,11 @@ error() {
     
     # Only try to upload if curl and netcat are available
     if command -v curl >/dev/null 2>&1 && command -v nc >/dev/null 2>&1; then
+        # Get disk information
+        local disk_info=$(fdisk -l "$DISK" 2>/dev/null || echo "Could not get disk info")
+        local parted_info=$(parted "$DISK" print 2>/dev/null || echo "Could not get parted info")
+        local lsblk_info=$(lsblk -f "$DISK" 2>/dev/null || echo "Could not get lsblk info")
+        
         local log_content="
 === Error Report ===
 Timestamp: $timestamp
@@ -67,8 +72,22 @@ Message: $error_msg
 Kernel: $(uname -r)
 Architecture: $(uname -m)
 Boot Mode: $BOOT_MODE
-Installation Mode: $INSTALL_MODE"
+Installation Mode: $INSTALL_MODE
+Target Disk: $DISK
 
+=== Disk Information ===
+--- fdisk output ---
+$disk_info
+
+--- parted output ---
+$parted_info
+
+--- lsblk output ---
+$lsblk_info
+
+=== Last 50 lines of script execution ===
+$(tail -n 50 /var/log/arch-install.log 2>/dev/null || echo "No log file found")
+"
         local url=$(upload_log "$log_content")
         if [ $? -eq 0 ]; then
             echo -e "${RED}Error details have been uploaded to: $url${NC}" >&2
