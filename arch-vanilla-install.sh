@@ -435,7 +435,7 @@ find_free_space() {
     echo "$largest_start $largest_size"
 }
 
-# Enhanced dual-boot setup function
+# Function to setup dual-boot
 setup_dual_boot() {
     local disk=$1
     
@@ -444,46 +444,54 @@ setup_dual_boot() {
         EFI_PART=$(detect_existing_os "$disk")
         log "Using existing EFI partition: $EFI_PART"
         
-        # Install required tools for partition management
-        pacman -Sy --noconfirm parted
-
-        # Find largest free space
-        read -r start_sector size_sectors < <(find_free_space "$disk")
+        # Check for existing Linux partition
+        ROOT_PART=$(fdisk -l "$disk" | grep "Linux filesystem" | tail -n 1 | awk '{print $1}')
         
-        if [ "$size_sectors" -lt 20971520 ]; then  # Minimum 10GB (in sectors)
-            error "Not enough free space for Arch Linux installation (minimum 10GB required)"
+        if [ -n "$ROOT_PART" ]; then
+            log "Using existing Linux partition: $ROOT_PART"
+            # Verify partition size
+            local size_bytes=$(blockdev --getsize64 "$ROOT_PART")
+            local size_gb=$((size_bytes / 1024 / 1024 / 1024))
+            
+            if [ "$size_gb" -lt 10 ]; then
+                error "Linux partition too small (minimum 10GB required)"
+            fi
+        else
+            # Find largest free space and create partition only if no Linux partition exists
+            read -r start_sector size_sectors < <(find_free_space "$disk")
+            
+            if [ "$size_sectors" -lt 20971520 ]; then  # Minimum 10GB (in sectors)
+                error "Not enough free space for Arch Linux installation (minimum 10GB required)"
+            fi
+            
+            # Create root partition in the free space
+            log "Creating root partition in available space..."
+            (
+                echo n    # new partition
+                echo     # default partition type (primary)
+                echo     # default partition number
+                echo     # default first sector
+                echo     # use rest of disk
+                echo t    # change partition type
+                echo     # select last partition
+                echo 23   # Linux root (x86-64)
+                echo w    # write changes
+            ) | fdisk "$disk" || error "Failed to create root partition"
+            
+            # Get the newly created root partition
+            ROOT_PART=$(fdisk -l "$disk" | grep "Linux filesystem\|Linux root" | tail -n 1 | awk '{print $1}')
         fi
         
-        # Create root partition in the free space
-        log "Creating root partition in available space..."
-        (
-            echo n    # new partition
-            echo     # default partition type (primary)
-            echo     # default partition number
-            echo     # default first sector
-            echo     # use rest of disk
-            echo t    # change partition type
-            echo     # select last partition (automatically selects the new one)
-            echo 23   # Linux root (x86-64)
-            echo w    # write changes
-        ) | fdisk "$disk" || error "Failed to create root partition"
-        
-        # Get the number of the newly created root partition
-        ROOT_PART=$(fdisk -l "$disk" | grep "Linux root" | tail -n 1 | awk '{print $1}')
-        
-        # Verify both partitions exist and have correct types
-        if ! fdisk -l "$disk" | grep -q "EFI System"; then
-            error "EFI System partition not found or has incorrect type"
+        # Verify both partitions exist
+        if [ ! -e "$EFI_PART" ]; then
+            error "EFI partition not found"
         fi
         
         if [ ! -e "$ROOT_PART" ]; then
-            error "Failed to create root partition"
+            error "Root partition not found"
         fi
         
-        # Update partition table
-        partprobe "$disk"
-        
-        log "Created root partition: $ROOT_PART"
+        log "Created/Found root partition: $ROOT_PART"
     else
         error "Legacy BIOS dual-boot is not supported. Please install in UEFI mode."
     fi
