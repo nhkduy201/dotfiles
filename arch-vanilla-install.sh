@@ -653,16 +653,23 @@ fi
 # Generate fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# Configure secure boot if in UEFI mode
+# Configure secure boot if in UEFI mode (move this section after chroot setup)
 if [ "$BOOT_MODE" = "UEFI" ]; then
     if [ -d /sys/firmware/efi/efivars ]; then
-        # Install sbctl first
-        pacman -Sy --noconfirm sbctl || error "Failed to install sbctl"
-        
-        # Now configure secure boot
-        sbctl create-keys
-        sbctl enroll-keys -m
-        sbctl sign -s /boot/vmlinuz-linux
+        # Install and configure secure boot inside chroot
+        arch-chroot /mnt bash -c "
+            # Install sbctl
+            pacman -Sy --noconfirm sbctl || exit 1
+            
+            # Configure secure boot
+            sbctl create-keys
+            sbctl enroll-keys -m
+            
+            # Sign all required files
+            sbctl sign -s /boot/vmlinuz-linux
+            sbctl sign -s /boot/efi/EFI/GRUB/grubx64.efi
+            sbctl verify
+        "
     fi
 fi
 
