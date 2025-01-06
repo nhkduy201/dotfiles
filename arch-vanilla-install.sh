@@ -336,34 +336,10 @@ timedatectl set-ntp true
 # Function to detect existing OS installations
 detect_existing_os() {
     local disk=$1
-    local os_found=false
     local efi_part=""
     
-    # Check if disk has GPT partition table
-    if ! parted "$disk" print | grep -q "Partition Table: gpt"; then
-        error "Dual boot requires GPT partition table. Please convert your disk to GPT first."
-    fi
-    
-    # Look for EFI partition using multiple methods
-    # First try fdisk
+    # Look for EFI partition
     efi_part=$(fdisk -l "$disk" | grep "EFI System" | awk '{print $1}')
-    
-    # If not found, try parted
-    if [ -z "$efi_part" ]; then
-        local efi_number=$(parted "$disk" print | grep "EFI system partition" | awk '{print $1}')
-        if [ -n "$efi_number" ]; then
-            if [[ "$disk" == *"nvme"* ]]; then
-                efi_part="${disk}p${efi_number}"
-            else
-                efi_part="${disk}${efi_number}"
-            fi
-        fi
-    fi
-    
-    # If still not found, try looking for vfat partition
-    if [ -z "$efi_part" ]; then
-        efi_part=$(lsblk -f "$disk" -o NAME,FSTYPE | grep "vfat" | head -n1 | awk '{print "/dev/"$1}')
-    fi
     
     if [ -z "$efi_part" ]; then
         error "No EFI partition found. Existing OS must be installed in UEFI mode."
@@ -376,42 +352,13 @@ detect_existing_os() {
         # Check for Windows boot manager
         if [ -d "$tmp_mount/EFI/Microsoft" ]; then
             log "Detected Windows installation"
-            os_found=true
         fi
-        
-        # Check for other Linux distributions
-        if [ -d "$tmp_mount/EFI/ubuntu" ] || [ -d "$tmp_mount/EFI/fedora" ] || [ -d "$tmp_mount/EFI/debian" ]; then
-            log "Detected other Linux distribution"
-            os_found=true
-        fi
-        
-        # Check for macOS
-        if [ -d "$tmp_mount/EFI/Apple" ]; then
-            log "Detected macOS installation"
-            os_found=true
-        fi
-        
         umount "$tmp_mount"
     fi
     rm -r "$tmp_mount"
     
-    if [ "$os_found" = false ]; then
-        log "Warning: No common OS boot files found, but proceeding with dual-boot setup"
-    fi
-    
-    # Fix partition type if needed
-    if ! fdisk -l "$disk" | grep -q "EFI System"; then
-        log "Fixing EFI partition type..."
-        (
-            echo t    # change partition type
-            echo 1    # select first partition
-            echo 1    # EFI System type
-            echo w    # write changes
-        ) | fdisk "$disk"
-    fi
-    
-    # Return only the partition path, without any log messages
-    printf "%s" "$efi_part"
+    # Return only the partition path
+    echo "$efi_part"
 }
 
 # Function to find largest free space on disk
@@ -442,8 +389,7 @@ setup_dual_boot() {
     
     if [ "$BOOT_MODE" = "UEFI" ]; then
         # Detect existing OS and EFI partition
-        local detected_efi=$(detect_existing_os "$disk")
-        EFI_PART="$detected_efi"  # Set global variable
+        EFI_PART=$(detect_existing_os "$disk" | tail -n1)  # Get last line only
         log "Using existing EFI partition: $EFI_PART"
         
         # Check for existing Linux partition
