@@ -597,12 +597,10 @@ log "Updating mirrorlist..."
 # Backup original mirrorlist
 cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
-# Update mirrors using reflector
-pacman -Sy --noconfirm reflector
-reflector --latest 20 \
-    --sort rate \
-    --protocol https \
-    --save /etc/pacman.d/mirrorlist
+# Use curl to fetch the latest mirrorlist, prioritizing Asian mirrors
+curl -s "https://archlinux.org/mirrorlist/?country=VN&country=SG&country=JP&country=KR&country=TW&country=HK&protocol=https&use_mirror_status=on" | \
+    sed -e 's/^#Server/Server/' -e '/^#/d' | \
+    rankmirrors -n 5 - > /etc/pacman.d/mirrorlist
 
 # Initialize keyring and update package database
 log "Updating keyring..."
@@ -614,19 +612,32 @@ pacman -Sy --noconfirm archlinux-keyring
 log "Updating package database..."
 pacman -Syy
 
-# Now proceed with pacstrap
+# Now proceed with pacstrap with retry mechanism
 log "Installing base system..."
-pacstrap /mnt base base-devel linux linux-firmware git gvim \
-    networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
-    xorg xorg-xinit xorg-xinput \
-    pipewire pipewire-alsa pipewire-pulse \
-    firefox tmux dmenu xclip pavucontrol python-pip \
-    ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
-    slock dconf wget libx11 libxinerama libxft freetype2 \
-    fuse openssh dnsmasq zip unrar torbrowser-launcher \
-    mpv yt-dlp gdb scrot sqlite sbctl os-prober \
-    grub efibootmgr \
-    $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock")
+max_retries=3
+retry_count=0
+while [ $retry_count -lt $max_retries ]; do
+    if pacstrap /mnt base base-devel linux linux-firmware git gvim \
+        networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
+        xorg xorg-xinit xorg-xinput \
+        pipewire pipewire-alsa pipewire-pulse \
+        firefox tmux dmenu xclip pavucontrol python-pip \
+        ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
+        slock dconf wget libx11 libxinerama libxft freetype2 \
+        fuse openssh dnsmasq zip unrar torbrowser-launcher \
+        mpv yt-dlp gdb scrot sqlite sbctl os-prober \
+        grub efibootmgr \
+        $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock"); then
+        break
+    fi
+    retry_count=$((retry_count + 1))
+    log "Retry $retry_count of $max_retries..."
+    sleep 5
+done
+
+if [ $retry_count -eq $max_retries ]; then
+    error "Failed to install packages after $max_retries attempts"
+fi
 
 # Generate fstab
 genfstab -U /mnt >> /mnt/etc/fstab
