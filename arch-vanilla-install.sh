@@ -597,25 +597,32 @@ log "Updating mirrorlist..."
 # Backup original mirrorlist
 cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
+# Install pacman-contrib for rankmirrors
+pacman -Sy --noconfirm pacman-contrib || error "Failed to install pacman-contrib"
+
 # Use curl to fetch the latest mirrorlist, prioritizing Asian mirrors
-curl -s "https://archlinux.org/mirrorlist/?country=VN&country=SG&country=JP&country=KR&country=TW&country=HK&protocol=https&use_mirror_status=on" | \
+if ! curl -s "https://archlinux.org/mirrorlist/?country=VN&country=SG&country=JP&country=KR&country=TW&country=HK&protocol=https&use_mirror_status=on" | \
     sed -e 's/^#Server/Server/' -e '/^#/d' | \
-    rankmirrors -n 5 - > /etc/pacman.d/mirrorlist
+    rankmirrors -n 5 - > /etc/pacman.d/mirrorlist; then
+    error "Failed to update mirrorlist"
+fi
 
 # Initialize keyring and update package database
 log "Updating keyring..."
-pacman-key --init
-pacman-key --populate archlinux
-pacman -Sy --noconfirm archlinux-keyring
+pacman-key --init || error "Failed to initialize pacman-key"
+pacman-key --populate archlinux || error "Failed to populate keyring"
+pacman -Sy --noconfirm archlinux-keyring || error "Failed to update archlinux-keyring"
 
 # Update package database
 log "Updating package database..."
-pacman -Syy
+pacman -Syy || error "Failed to update package database"
 
 # Now proceed with pacstrap with retry mechanism
 log "Installing base system..."
 max_retries=3
 retry_count=0
+success=false
+
 while [ $retry_count -lt $max_retries ]; do
     if pacstrap /mnt base base-devel linux linux-firmware git gvim \
         networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
@@ -628,14 +635,18 @@ while [ $retry_count -lt $max_retries ]; do
         mpv yt-dlp gdb scrot sqlite sbctl os-prober \
         grub efibootmgr \
         $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock"); then
+        success=true
         break
     fi
     retry_count=$((retry_count + 1))
-    log "Retry $retry_count of $max_retries..."
+    log "Package installation failed. Retry $retry_count of $max_retries..."
     sleep 5
+    
+    # Refresh package databases before retrying
+    pacman -Syy || log "Warning: Failed to refresh package databases before retry"
 done
 
-if [ $retry_count -eq $max_retries ]; then
+if [ "$success" != "true" ]; then
     error "Failed to install packages after $max_retries attempts"
 fi
 
