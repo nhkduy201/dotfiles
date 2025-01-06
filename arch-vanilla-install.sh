@@ -567,6 +567,31 @@ sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 # Update package database
 pacman -Sy
 
+# After mounting partitions and before pacstrap, add these lines:
+log "Configuring network and DNS..."
+# Configure systemd-resolved with Google DNS
+cat > /etc/systemd/resolved.conf << EOF
+[Resolve]
+DNS=8.8.8.8 8.8.4.4
+FallbackDNS=1.1.1.1 1.0.0.1
+DNSOverTLS=yes
+DNSSEC=yes
+EOF
+
+# Restart systemd-resolved and update DNS configuration
+systemctl restart systemd-resolved
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+# Initialize and update keyring
+log "Updating keyring..."
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy --noconfirm archlinux-keyring
+
+# Update package database
+log "Updating package database..."
+pacman -Syy
+
 # Install base system
 log "Installing base system..."
 pacstrap /mnt base base-devel linux linux-firmware git gvim \
