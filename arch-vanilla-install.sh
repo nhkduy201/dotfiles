@@ -754,18 +754,75 @@ chmod +x /mnt/setup.sh
 
 # Setup additional configurations
 log "Setting up additional configurations..."
-arch-chroot /mnt bash -c "
-    bash -c '$(declare -f setup_touchpad setup_git install_gaming_packages install_aur_packages download_softwares keyboard_backlight install_suckless_software)'
+arch-chroot /mnt bash -c "$(cat << 'CHROOT'
+    # Define all functions first
+    setup_touchpad() {
+        mkdir -p /etc/X11/xorg.conf.d/
+        cat > /etc/X11/xorg.conf.d/30-touchpad.conf << EOF
+Section "InputClass"
+    Identifier "touchpad"
+    Driver "libinput"
+    MatchIsTouchpad "on"
+    Option "Tapping" "on"
+    Option "TappingButtonMap" "lrm"
+    Option "NaturalScrolling" "true"
+    Option "ScrollMethod" "twofinger"
+EndSection
+EOF
+    }
+
+    setup_git() {
+        pacman -S --noconfirm git
+    }
+
+    install_gaming_packages() {
+        pacman -S --noconfirm steam lutris wine-staging gamemode lib32-gamemode
+    }
+
+    install_aur_packages() {
+        # Install yay
+        cd /tmp
+        git clone https://aur.archlinux.org/yay.git
+        cd yay
+        makepkg -si --noconfirm
+    }
+
+    download_softwares() {
+        pacman -S --noconfirm discord telegram-desktop
+    }
+
+    keyboard_backlight() {
+        # Add user to video group for backlight control
+        usermod -aG video $USERNAME
+    }
+
+    install_suckless_software() {
+        cd /tmp
+        git clone https://git.suckless.org/dwm
+        git clone https://git.suckless.org/st
+        git clone https://git.suckless.org/dmenu
+        
+        cd dwm && make clean install
+        cd ../st && make clean install
+        cd ../dmenu && make clean install
+    }
+
+    # Now execute the functions
     setup_touchpad
     setup_git
     install_gaming_packages
     install_aur_packages
     download_softwares
     keyboard_backlight
-    if [ \"$WM_CHOICE\" = \"dwm\" ]; then
+    if [ "$WM_CHOICE" = "dwm" ]; then
         install_suckless_software
     fi
-"
+
+    # Configure GRUB
+    mkdir -p /boot/grub
+    grub-mkconfig -o /boot/grub/grub.cfg
+CHROOT
+)"
 
 # Change GRUB timeout
 arch-chroot /mnt bash -c "
