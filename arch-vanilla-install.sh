@@ -656,6 +656,10 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # Configure secure boot if in UEFI mode
 if [ "$BOOT_MODE" = "UEFI" ]; then
     if [ -d /sys/firmware/efi/efivars ]; then
+        # Install sbctl first
+        pacman -Sy --noconfirm sbctl || error "Failed to install sbctl"
+        
+        # Now configure secure boot
         sbctl create-keys
         sbctl enroll-keys -m
         sbctl sign -s /boot/vmlinuz-linux
