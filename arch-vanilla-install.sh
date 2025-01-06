@@ -592,7 +592,29 @@ pacman -Sy --noconfirm archlinux-keyring
 log "Updating package database..."
 pacman -Syy
 
-# Install base system
+# After DNS configuration and before pacstrap, add these lines:
+log "Updating mirrorlist..."
+# Backup original mirrorlist
+cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+
+# Update mirrors using reflector
+pacman -Sy --noconfirm reflector
+reflector --latest 20 \
+    --sort rate \
+    --protocol https \
+    --save /etc/pacman.d/mirrorlist
+
+# Initialize keyring and update package database
+log "Updating keyring..."
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy --noconfirm archlinux-keyring
+
+# Update package database
+log "Updating package database..."
+pacman -Syy
+
+# Now proceed with pacstrap
 log "Installing base system..."
 pacstrap /mnt base base-devel linux linux-firmware git gvim \
     networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
