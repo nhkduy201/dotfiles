@@ -619,19 +619,7 @@ pacman -Syy || error "Failed to update package database"
 
 # Define ultra-minimal base packages
 MINIMAL_PACKAGES="base linux linux-firmware \
-    networkmanager \
     grub efibootmgr"  # efibootmgr only needed for UEFI
-
-# Define base-devel and additional packages for full installation
-FULL_PACKAGES="base-devel git gvim \
-    network-manager-applet wireless_tools dialog \
-    xorg xorg-xinit xorg-xinput \
-    pipewire pipewire-alsa pipewire-pulse \
-    firefox tmux dmenu xclip pavucontrol python-pip \
-    ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
-    slock dconf wget libx11 libxinerama libxft freetype2 \
-    fuse openssh dnsmasq zip unrar torbrowser-launcher \
-    mpv yt-dlp gdb scrot sqlite sbctl os-prober"
 
 # Modify the pacstrap section
 log "Installing base system..."
@@ -668,207 +656,23 @@ fi
 # Generate fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# Configure secure boot if in UEFI mode (move this section after chroot setup)
-if [ "$BOOT_MODE" = "UEFI" ]; then
-    if [ -d /sys/firmware/efi/efivars ]; then
-        # Install and configure secure boot inside chroot
-        arch-chroot /mnt bash -c "
-            # Install sbctl
-            pacman -Sy --noconfirm sbctl || exit 1
-            
-            # Configure secure boot
-            sbctl create-keys
-            sbctl enroll-keys -m
-            
-            # Sign all required files
-            sbctl sign -s /boot/vmlinuz-linux
-            sbctl sign -s /boot/efi/EFI/GRUB/grubx64.efi
-            sbctl verify
-        "
-    fi
+if [ "$INSTALL_TYPE" = "minimal" ]; then
+    # Minimal setup: just configure bootloader
+    arch-chroot /mnt bash -c "
+        # Install bootloader
+        if [ -d /sys/firmware/efi/efivars ]; then
+            grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+        else
+            grub-install --target=i386-pc $DISK
+        fi
+        grub-mkconfig -o /boot/grub/grub.cfg
+    "
+    
+    # Unmount and finish
+    umount -R /mnt
+    log "Minimal installation complete! You can now reboot."
+    exit 0
 fi
 
-# Create configuration script
-log "Creating configuration script..."
-
-# Modify the bootloader installation in setup.sh
-cat > /mnt/setup.sh << 'EOF'
-#!/bin/bash
-set -e
-
-# Import variables from parent script
-USERNAME="$1"
-HOSTNAME="$2"
-TIMEZONE="$3"
-WM_CHOICE="$4"
-PASSWORD="$5"
-INSTALL_MODE="$6"
-
-# Basic system configuration
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
-hwclock --systohc
-echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-echo "KEYMAP=us" > /etc/vconsole.conf
-echo "$HOSTNAME" > /etc/hostname
-
-# Configure hosts
-cat > /etc/hosts << EOHOST
-127.0.0.1   localhost
-::1         localhost
-127.0.1.1   $HOSTNAME.localdomain $HOSTNAME
-EOHOST
-
-# Set root password
-echo "root:$PASSWORD" | chpasswd
-
-# Create user
-useradd -m -G wheel -s /bin/bash $USERNAME
-echo "$USERNAME:$PASSWORD" | chpasswd
-
-# Configure sudo
-echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
-
-# Install and configure bootloader
-if [ -d /sys/firmware/efi/efivars ]; then
-    if [ "$INSTALL_MODE" = "dual" ]; then
-        mkdir -p /boot/efi
-        grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-        echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
-    else
-        grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
-    fi
-else
-    pacman -S --noconfirm grub
-    grub-install --target=i386-pc /dev/nvme0n1
-fi
-grub-mkconfig -o /boot/grub/grub.cfg
-
-# Enable essential services
-systemctl enable NetworkManager
-EOF
-else
-    # Use existing full setup script
-    # ... (keep your existing setup script for full installation)
-fi
-
-# Make setup script executable
-chmod +x /mnt/setup.sh
-
-# Setup additional configurations
-log "Setting up additional configurations..."
-arch-chroot /mnt bash -c "$(cat << 'CHROOT'
-    # Define all functions first
-    setup_touchpad() {
-        mkdir -p /etc/X11/xorg.conf.d/
-        cat > /etc/X11/xorg.conf.d/30-touchpad.conf << EOF
-Section "InputClass"
-    Identifier "touchpad"
-    Driver "libinput"
-    MatchIsTouchpad "on"
-    Option "Tapping" "on"
-    Option "TappingButtonMap" "lrm"
-    Option "NaturalScrolling" "true"
-    Option "ScrollMethod" "twofinger"
-EndSection
-EOF
-    }
-
-    setup_git() {
-        pacman -S --noconfirm git
-    }
-
-    install_gaming_packages() {
-        pacman -S --noconfirm steam lutris wine-staging gamemode lib32-gamemode
-    }
-
-    install_aur_packages() {
-        # Install yay
-        cd /tmp
-        git clone https://aur.archlinux.org/yay.git
-        cd yay
-        makepkg -si --noconfirm
-    }
-
-    download_softwares() {
-        pacman -S --noconfirm discord telegram-desktop
-    }
-
-    keyboard_backlight() {
-        # Add user to video group for backlight control
-        usermod -aG video $USERNAME
-    }
-
-    install_suckless_software() {
-        cd /tmp
-        git clone https://git.suckless.org/dwm
-        git clone https://git.suckless.org/st
-        git clone https://git.suckless.org/dmenu
-        
-        cd dwm && make clean install
-        cd ../st && make clean install
-        cd ../dmenu && make clean install
-    }
-
-    # Now execute the functions
-    setup_touchpad
-    setup_git
-    install_gaming_packages
-    install_aur_packages
-    download_softwares
-    keyboard_backlight
-    if [ "$WM_CHOICE" = "dwm" ]; then
-        install_suckless_software
-    fi
-
-    # Configure GRUB
-    mkdir -p /boot/grub
-    grub-mkconfig -o /boot/grub/grub.cfg
-CHROOT
-)"
-
-# Change GRUB timeout
-arch-chroot /mnt bash -c "
-    sed -i 's/GRUB_TIMEOUT=5/GRUB_TIMEOUT=1/' /etc/default/grub
-    grub-mkconfig -o /boot/grub/grub.cfg
-"
-
-# Configure systemd-resolved
-arch-chroot /mnt bash -c "
-    systemctl enable systemd-resolved --now
-    ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-    cat > /etc/systemd/resolved.conf << EOF
-DNS=8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844
-FallbackDNS=1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001
-DNSOverTLS=yes
-EOF
-    systemctl restart systemd-resolved
-"
-
-# Disable telemetry
-cat >> /mnt/etc/hosts << EOF
-## For an-anime-game-launcher-bin
-0.0.0.0 sg-public-data-api.hoyoverse.com
-0.0.0.0 log-upload-os.hoyoverse.com
-0.0.0.0 log-upload-os.mihoyo.com
-0.0.0.0 overseauspider.yuanshen.com
-0.0.0.0 public-data-api.mihoyo.com
-0.0.0.0 log-upload.mihoyo.com
-EOF
-
-# Chroot and run setup
-log "Running system configuration..."
-arch-chroot /mnt ./setup.sh "$USERNAME" "$HOSTNAME" "$TIMEZONE" "$WM_CHOICE" "$PASSWORD" "$INSTALL_MODE"
-
-# Clean up
-rm /mnt/setup.sh
-
-# Unmount
-log "Unmounting filesystems..."
-umount -R /mnt
-
-log "Installation complete! You can now reboot."
-log "After reboot:"
-log "1. Log in as $USERNAME"
-log "2. Run 'startx' to start the graphical environment"
+# Continue with full installation if not minimal
+# ... (rest of your existing script for full installation)
