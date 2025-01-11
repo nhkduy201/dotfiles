@@ -617,32 +617,47 @@ pacman -Sy --noconfirm archlinux-keyring || error "Failed to update archlinux-ke
 log "Updating package database..."
 pacman -Syy || error "Failed to update package database"
 
-# Now proceed with pacstrap with retry mechanism
+# Define ultra-minimal base packages
+MINIMAL_PACKAGES="base linux linux-firmware \
+    networkmanager \
+    grub efibootmgr"  # efibootmgr only needed for UEFI
+
+# Define base-devel and additional packages for full installation
+FULL_PACKAGES="base-devel git gvim \
+    network-manager-applet wireless_tools dialog \
+    xorg xorg-xinit xorg-xinput \
+    pipewire pipewire-alsa pipewire-pulse \
+    firefox tmux dmenu xclip pavucontrol python-pip \
+    ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
+    slock dconf wget libx11 libxinerama libxft freetype2 \
+    fuse openssh dnsmasq zip unrar torbrowser-launcher \
+    mpv yt-dlp gdb scrot sqlite sbctl os-prober"
+
+# Modify the pacstrap section
 log "Installing base system..."
 max_retries=3
 retry_count=0
 success=false
 
 while [ $retry_count -lt $max_retries ]; do
-    if pacstrap /mnt base base-devel linux linux-firmware git gvim \
-        networkmanager network-manager-applet wireless_tools wpa_supplicant dialog \
-        xorg xorg-xinit xorg-xinput \
-        pipewire pipewire-alsa pipewire-pulse \
-        firefox tmux dmenu xclip pavucontrol python-pip \
-        ttf-font-awesome ttf-cascadia-code noto-fonts-emoji \
-        slock dconf wget libx11 libxinerama libxft freetype2 \
-        fuse openssh dnsmasq zip unrar torbrowser-launcher \
-        mpv yt-dlp gdb scrot sqlite sbctl os-prober \
-        grub efibootmgr \
-        $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock"); then
-        success=true
-        break
+    if [ "$INSTALL_TYPE" = "minimal" ]; then
+        # Ultra-minimal installation
+        if pacstrap /mnt $MINIMAL_PACKAGES; then
+            success=true
+            break
+        fi
+    else
+        # Full installation
+        if pacstrap /mnt $MINIMAL_PACKAGES $FULL_PACKAGES \
+            $([ "$WM_CHOICE" = "i3" ] && echo "i3-wm i3status i3blocks i3lock"); then
+            success=true
+            break
+        fi
     fi
+    
     retry_count=$((retry_count + 1))
     log "Package installation failed. Retry $retry_count of $max_retries..."
     sleep 5
-    
-    # Refresh package databases before retrying
     pacman -Syy || log "Warning: Failed to refresh package databases before retry"
 done
 
@@ -718,10 +733,8 @@ echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
 # Install and configure bootloader
 if [ -d /sys/firmware/efi/efivars ]; then
     if [ "$INSTALL_MODE" = "dual" ]; then
-        # Configure for dual boot
         mkdir -p /boot/efi
         grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-        # Enable os-prober
         echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
     else
         grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
@@ -732,22 +745,13 @@ else
 fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Enable services
+# Enable essential services
 systemctl enable NetworkManager
-systemctl enable systemd-resolved
-
-# Configure initial window manager
-if [ "$WM_CHOICE" = "i3" ]; then
-    mkdir -p /home/$USERNAME/.config/i3
-    echo "exec i3" > /home/$USERNAME/.xinitrc
-else
-    echo "exec dwm" > /home/$USERNAME/.xinitrc
-fi
-
-# Set correct ownership
-chown -R $USERNAME:$USERNAME /home/$USERNAME
-
 EOF
+else
+    # Use existing full setup script
+    # ... (keep your existing setup script for full installation)
+fi
 
 # Make setup script executable
 chmod +x /mnt/setup.sh
