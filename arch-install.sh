@@ -15,14 +15,97 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+# Log collection setup
+exec > >(tee -a /var/log/arch-install.log)
+exec 2> >(tee -a /var/log/arch-install.log >&2)
+
 error() {
-    echo -e "${RED}Error: $1${NC}" >&2
+    local error_msg="$1"
+    local line_no="$LINENO"
+    local script_name=$(basename "$0")
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    echo -e "${RED}Error: $error_msg${NC}" >&2
+    
+    # Enhanced log collection
+    local log_content="
+=== Error Report ===
+Timestamp: $timestamp
+Script: $script_name
+Error at line: $line_no
+Last command: $(history | tail -n1 | sed 's/^[ ]*[0-9]\+[ ]*//')
+Exit code: $?
+Message: $error_msg
+
+=== System Information ===
+Kernel: $(uname -r)
+Architecture: $(uname -m)
+Boot Mode: $([ -d "/sys/firmware/efi/efivars" ] && echo "UEFI" || echo "BIOS")
+Installation Mode: $INSTALL_MODE
+Target Disk: $DISK
+Mounted FS: $(mount | grep '/mnt' || echo "None")
+
+=== Disk Information ===
+--- lsblk output ---
+$(lsblk -f "$DISK" 2>/dev/null || echo "Could not get lsblk info")
+
+--- parted output ---
+$(parted "$DISK" print 2>/dev/null || echo "Could not get parted info")
+
+=== Network Status ===
+$(ip a 2>/dev/null || echo "No network info")
+
+=== Kernel Messages ===
+$(dmesg | tail -n30 2>/dev/null || echo "No dmesg output")
+
+=== Last 100 lines of script execution ---
+$(tail -n100 /var/log/arch-install.log 2>/dev/null || echo "No log file found")
+"
+
+    # Try multiple paste services with fallback
+    local url=""
+    for service in dpaste.org termbin.com ix.io; do
+        url=$(upload_log "$log_content" "$service")
+        if [[ $url =~ ^https?:// ]]; then
+            echo -e "${RED}Error log: $url${NC}" >&2
+            echo -e "${RED}Please share this URL for support${NC}" >&2
+            break
+        fi
+    done
+    
     exit 1
+}
+
+upload_log() {
+    local log_content="$1"
+    local service="$2"
+    local url=""
+    local max_size=524288  # 512KB
+
+    # Truncate if needed (keep beginning and end)
+    if [ ${#log_content} -gt $max_size ]; then
+        log_content="${log_content:0:$((max_size/2))}\n[...TRUNCATED...]\n${log_content: -$((max_size/2))}"
+    fi
+
+    case $service in
+        dpaste.org)
+            url=$(curl -s -F "content=<-" -F "hold=86400" https://dpaste.org/api/ <<< "$log_content" | awk '/^https:/ {print $1}')
+            ;;
+        termbin.com)
+            url=$(nc termbin.com 9999 <<< "$log_content" | tr -d '\0')
+            ;;
+        ix.io)
+            url=$(curl -s -F 'f:1=<-' ix.io <<< "$log_content")
+            ;;
+    esac
+
+    # Validate URL format
+    [[ "$url" =~ ^https?:// ]] && echo "$url" || echo ""
 }
 
 show_help() {
     cat <<EOF
-Usage: bash <(wget -qO- https://raw.githubusercontent.com/yourusername/repo/main/arch-install.sh) [OPTIONS]
+Usage: bash <(curl -sL https://raw.githubusercontent.com/yourusername/repo/main/arch-install.sh) [OPTIONS]
 
 Required options:
   -m, --mode MODE      Installation mode (clean|dual)
@@ -38,11 +121,14 @@ Optional:
   -h, --help           Show this help
 
 Examples:
-  Minimal:  bash <(wget -qO- URL) -m dual -u myuser
-  Full:     bash <(wget -qO- URL) -m clean -d /dev/sda -n myarch -u admin -s 'S3cur3P@ss!'
+  Minimal:  bash <(curl -sL URL) -m dual -u myuser
+  Full:     bash <(curl -sL URL) -m clean -d /dev/sda -n myarch -u admin -s 'S3cur3P@ss!'
 EOF
     exit 0
 }
+
+# Check root
+[ "$(id -u)" -eq 0 ] || error "This script must be run as root"
 
 # Parse command-line options
 while [[ $# -gt 0 ]]; do
@@ -204,4 +290,5 @@ echo -e "Next steps:"
 echo "1. Reboot: systemctl reboot"
 echo "2. Remove installation media"
 echo "3. Login with: $USERNAME / $PASSWORD"
-echo "4. Change password: passwd"
+echo "4. Change password using 'passwd'"
+echo "5. Check Secure Boot status in BIOS if needed"
