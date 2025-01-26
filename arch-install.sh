@@ -227,11 +227,15 @@ clean_partition() {
 dual_partition() {
     echo -e "${GREEN}Detecting existing partitions...${NC}"
     
-    # Get disk size in MiB
-    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("MiB","",$3); print $3}')
+    # Get disk size in MiB (strip non-numeric characters)
+    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("[^0-9]", "", $3); print $3}')
     
-    # Find the end of the last partition (remove decimal for integer math)
-    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {print $3}' | tail -n1 | cut -d'.' -f1)
+    # Find the end of the last partition (numeric value only)
+    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {gsub("[^0-9]", "", $3); print $3}' | tail -n1)
+    
+    # Verify numeric values
+    [[ "$disk_size_mib" =~ ^[0-9]+$ ]] || error_handler "Invalid disk size: $disk_size_mib"
+    [[ "$last_part_end" =~ ^[0-9]+$ ]] || error_handler "Invalid partition end: $last_part_end"
     
     # Calculate available space
     free_space_mib=$((disk_size_mib - last_part_end))
@@ -239,7 +243,7 @@ dual_partition() {
     # Verify minimum 10GB (10240MiB)
     [ "$free_space_mib" -ge 10240 ] || error_handler "Need 10GB free space after last partition (found ${free_space_mib}MiB)"
     
-    echo -e "${GREEN}Creating partition using all ${free_space_mib}MiB free space...${NC}"
+    echo -e "${GREEN}Creating partition using ${free_space_mib}MiB free space...${NC}"
     
     # Create partition using 100% of remaining space
     if ! parted -s "$DISK" mkpart primary ext4 "${last_part_end}MiB" "100%"; then
@@ -249,8 +253,10 @@ dual_partition() {
     # Get new partition path
     ROOT_PART=$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -n1)
     ROOT_PART="${DISK}p${ROOT_PART}"
-    BOOT_PART="$existing_efi"
+    existing_efi=$(parted -s "$DISK" print | awk '/esp/ {print $1}' | head -1)
+    BOOT_PART="${DISK}p${existing_efi}"
 }
+
 # Secure Boot setup
 setup_secure_boot() {
     arch-chroot /mnt bash <<EOF || error_handler "Secure Boot setup failed"
