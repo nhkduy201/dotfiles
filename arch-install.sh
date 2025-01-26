@@ -241,24 +241,31 @@ clean_partition() {
 
 dual_partition() {
     echo -e "${GREEN}Detecting existing partitions...${NC}"
-    existing_efi=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
-    [ -b "$existing_efi" ] || error_handler "No existing EFI partition found"
     
-    free_space=$(parted "$DISK" unit MiB print free | grep "Free Space" | tail -1)
-    [ -z "$free_space" ] && error_handler "No free space available"
-
-    start=$(echo "$free_space" | awk '{print $1}' | tr -d 'MiB')
-    end=$(echo "$free_space" | awk '{print $3}' | tr -d 'MiB')
-    [ $((end - start)) -ge 10240 ] || error_handler "Minimum 10GB free space required"
-
-    if ! parted -s "$DISK" mkpart primary ext4 "${start}MiB" "${end}MiB"; then
+    # Get disk size in MiB
+    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("MiB","",$3); print $3}')
+    
+    # Find the end of the last partition (remove decimal for integer math)
+    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {print $3}' | tail -n1 | cut -d'.' -f1)
+    
+    # Calculate available space
+    free_space_mib=$((disk_size_mib - last_part_end))
+    
+    # Verify minimum 10GB (10240MiB)
+    [ "$free_space_mib" -ge 10240 ] || error_handler "Need 10GB free space after last partition (found ${free_space_mib}MiB)"
+    
+    echo -e "${GREEN}Creating partition using all ${free_space_mib}MiB free space...${NC}"
+    
+    # Create partition using 100% of remaining space
+    if ! parted -s "$DISK" mkpart primary ext4 "${last_part_end}MiB" "100%"; then
         error_handler "Failed to create root partition"
     fi
     
-    ROOT_PART="${DISK}p$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -1)"
+    # Get new partition path
+    ROOT_PART=$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -n1)
+    ROOT_PART="${DISK}p${ROOT_PART}"
     BOOT_PART="$existing_efi"
 }
-
 # Secure Boot setup
 setup_secure_boot() {
     arch-chroot /mnt bash <<EOF || error_handler "Secure Boot setup failed"
