@@ -16,6 +16,9 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 trap 'error_handler "Script failed at line $LINENO"' ERR
 
+# Install required tools early
+pacman -Sy --noconfirm curl openbsd-netcat &>/dev/null || true
+
 # Log collection setup
 LOGFILE="/var/log/arch-install.log"
 exec > >(tee -a "$LOGFILE")
@@ -23,12 +26,11 @@ exec 2> >(tee -a "$LOGFILE" >&2)
 
 error_handler() {
     local error_msg="$1"
-    local line_no="$BASH_LINENO"
     local script_name=$(basename "$0")
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
     # Capture error context
-    local last_command=$(fc -ln -0 2>/dev/null || echo "Unknown command")
+    local last_command=$(history 1 | sed 's/^[ ]*[0-9]\+[ ]*//')
     local exit_code=$?
 
     # Build comprehensive error report
@@ -36,7 +38,6 @@ error_handler() {
 === ERROR REPORT ===
 Timestamp: $timestamp
 Script: $script_name
-Line: $line_no
 Last Command: $last_command
 Exit Code: $exit_code
 Message: $error_msg
@@ -56,10 +57,10 @@ $(parted -s "$DISK" print 2>/dev/null || echo "No partition information")
 $(mount | grep '/mnt' || echo "No mounts")
 
 === NETWORK STATUS ===
-$(ip a 2>/dev/null || echo "No network info")
+$(ip -brief address 2>/dev/null || echo "No network info")
 
 === KERNEL LOGS ===
-$(dmesg | tail -n30 2>/dev/null || echo "No dmesg output")
+$(dmesg | tail -n20 2>/dev/null || echo "No dmesg output")
 
 === INSTALLATION LOGS ===
 $(tail -n200 "$LOGFILE" 2>/dev/null || echo "No log file found")
@@ -76,7 +77,8 @@ EOF
     # Display error message
     echo -e "\n${RED}ERROR: $error_msg${NC}" >&2
     [ -n "$upload_url" ] && echo -e "${RED}DEBUG LOG: $upload_url${NC}" >&2
-    echo -e "${RED}Please share this URL if you need support${NC}" >&2
+    [ -z "$upload_url" ] && echo -e "${RED}Log upload failed - see $LOGFILE${NC}" >&2
+    echo -e "${RED}Installation failed - please share the debug URL if seeking help${NC}" >&2
     
     exit 1
 }
@@ -87,19 +89,19 @@ upload_log() {
     local url=""
     local max_size=500000  # ~500KB
 
-    # Truncate content if too large
+    # Truncate content if needed
     content=$(echo "$content" | head -c $max_size)
 
     case $service in
     dpaste.org)
         url=$(curl -s -F "content=<-" -F "format=url" -F "lexer=text" -F "expires=86400" \
-            "https://dpaste.org/api/" <<< "$content" | tr -d '"')
+            "https://dpaste.org/api/" <<< "$content" | tr -d '"' 2>/dev/null) || true
         ;;
     termbin.com)
-        url=$(nc termbin.com 9999 <<< "$content" | tr -d '\0')
+        url=$(timeout 10 nc termbin.com 9999 <<< "$content" | tr -d '\0' 2>/dev/null) || true
         ;;
     ix.io)
-        url=$(curl -s -F 'f:1=<-' ix.io <<< "$content")
+        url=$(curl -s -F 'f:1=<-' ix.io <<< "$content" 2>/dev/null) || true
         ;;
     esac
 
@@ -131,7 +133,7 @@ EOF
 }
 
 # Check root
-[ "$(id -u)" -eq 0 ] || error "This script must be run as root"
+[ "$(id -u)" -eq 0 ] || error_handler "This script must be run as root"
 
 # Parse command-line options
 while [[ $# -gt 0 ]]; do
@@ -164,20 +166,20 @@ while [[ $# -gt 0 ]]; do
             show_help
             ;;
         *)
-            error "Invalid option: $1"
+            error_handler "Invalid option: $1"
             ;;
     esac
 done
 
 # Validate parameters
-[[ "$INSTALL_MODE" =~ ^(clean|dual)$ ]] || error "Invalid mode: $INSTALL_MODE"
-[[ -b "$DISK" ]] || error "Disk $DISK not found"
-[[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || error "Invalid username: $USERNAME"
-[[ -n "$PASSWORD" ]] || error "Password cannot be empty"
+[[ "$INSTALL_MODE" =~ ^(clean|dual)$ ]] || error_handler "Invalid mode: $INSTALL_MODE"
+[[ -b "$DISK" ]] || error_handler "Disk $DISK not found"
+[[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || error_handler "Invalid username: $USERNAME"
+[[ -n "$PASSWORD" ]] || error_handler "Password cannot be empty"
 
 # UEFI verification
 check_uefi() {
-    [ -d "/sys/firmware/efi/efivars" ] || error "UEFI mode required"
+    [ -d "/sys/firmware/efi/efivars" ] || error_handler "UEFI mode required"
 }
 
 # Partitioning functions
@@ -187,7 +189,7 @@ clean_partition() {
         mkpart primary fat32 1MiB $BOOT_SIZE \
         set 1 esp on \
         mkpart primary ext4 $BOOT_SIZE 100%; then
-        error "Partitioning failed"
+        error_handler "Partitioning failed"
     fi
     BOOT_PART="${DISK}p1"
     ROOT_PART="${DISK}p2"
@@ -196,17 +198,17 @@ clean_partition() {
 dual_partition() {
     echo -e "${GREEN}Detecting existing partitions...${NC}"
     existing_efi=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
-    [ -b "$existing_efi" ] || error "No existing EFI partition found"
+    [ -b "$existing_efi" ] || error_handler "No existing EFI partition found"
     
     free_space=$(parted "$DISK" unit MiB print free | grep "Free Space" | tail -1)
-    [ -z "$free_space" ] && error "No free space available"
+    [ -z "$free_space" ] && error_handler "No free space available"
 
     start=$(echo "$free_space" | awk '{print $1}' | tr -d 'MiB')
     end=$(echo "$free_space" | awk '{print $3}' | tr -d 'MiB')
-    [ $((end - start)) -ge 10240 ] || error "Minimum 10GB free space required"
+    [ $((end - start)) -ge 10240 ] || error_handler "Minimum 10GB free space required"
 
     if ! parted -s "$DISK" mkpart primary ext4 "${start}MiB" "${end}MiB"; then
-        error "Failed to create root partition"
+        error_handler "Failed to create root partition"
     fi
     
     ROOT_PART="${DISK}p$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -1)"
@@ -215,12 +217,12 @@ dual_partition() {
 
 # Secure Boot setup
 setup_secure_boot() {
-    arch-chroot /mnt bash <<EOF
-    pacman -Sy --noconfirm sbctl || exit 1
-    sbctl create-keys || exit 1
-    sbctl enroll-keys --microsoft || exit 1
-    sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI || exit 1
-    sbctl sign -s /boot/EFI/arch/vmlinuz-linux || exit 1
+    arch-chroot /mnt bash <<EOF || error_handler "Secure Boot setup failed"
+    pacman -Sy --noconfirm sbctl
+    sbctl create-keys
+    sbctl enroll-keys --microsoft
+    sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+    sbctl sign -s /boot/EFI/arch/vmlinuz-linux
 EOF
 }
 
@@ -237,23 +239,23 @@ fi
 # Formatting
 echo -e "${GREEN}Formatting partitions...${NC}"
 [ "$INSTALL_MODE" = "clean" ] && mkfs.fat -F32 "$BOOT_PART"
-mkfs.ext4 -F "$ROOT_PART" || error "Formatting failed"
+mkfs.ext4 -F "$ROOT_PART" || error_handler "Formatting failed"
 
 # Mounting
 echo -e "${GREEN}Mounting filesystems...${NC}"
-mount "$ROOT_PART" /mnt || error "Failed to mount root"
+mount "$ROOT_PART" /mnt || error_handler "Failed to mount root"
 mkdir -p /mnt/boot/efi
-mount "$BOOT_PART" /mnt/boot/efi || error "Failed to mount EFI"
+mount "$BOOT_PART" /mnt/boot/efi || error_handler "Failed to mount EFI"
 
 # Base system
 echo -e "${GREEN}Installing base system...${NC}"
-pacstrap /mnt base linux linux-firmware networkmanager sudo efibootmgr || error "Package install failed"
+pacstrap /mnt base linux linux-firmware networkmanager sudo efibootmgr || error_handler "Package install failed"
 
 # Generate fstab
-genfstab -U /mnt >> /mnt/etc/fstab || error "fstab generation failed"
+genfstab -U /mnt >> /mnt/etc/fstab || error_handler "fstab generation failed"
 
 # Chroot setup
-arch-chroot /mnt /bin/bash <<EOF || error "Chroot operations failed"
+arch-chroot /mnt /bin/bash <<EOF || error_handler "Chroot operations failed"
 # Basic setup
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
@@ -269,7 +271,7 @@ echo "$USERNAME:$PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
 # Bootloader
-bootctl install || exit 1
+bootctl install
 cat <<LOADER > /boot/loader/entries/arch.conf
 title Arch Linux
 linux /vmlinuz-linux
@@ -288,7 +290,7 @@ EOF
 umount -R /mnt
 
 # Final message
-echo -e "${GREEN}Installation successful!${NC}"
+echo -e "${GREEN}Installation completed successfully!${NC}"
 echo -e "Next steps:"
 echo "1. Reboot: systemctl reboot"
 echo "2. Remove installation media"
