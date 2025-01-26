@@ -106,30 +106,35 @@ trap 'exit_handler' EXIT
 upload_log() {
     local content="$1"
     local service="$2"
-    local max_size=50000  # 50KB for better compatibility
+    local max_size=50000  # 50KB
     local timeout=10
     local url=""
     
-    # Trim content to last 50KB and convert to base64
-    content=$(echo "$content" | tail -c $max_size | base64 -w0)
+    # Trim content to last 50KB without base64
+    content=$(echo "$content" | tail -c $max_size)
 
     case $service in
     dpaste.org)
-        { url=$(timeout $timeout curl -s -X POST "https://dpaste.org/api/" \
-            -F "content=<-" \
+        { url=$(timeout $timeout curl -v -s -F "content=<-" \
             -F "format=url" \
             -F "lexer=text" \
-            <<< "$content" | tr -d '"'); } 2>/dev/null || true
+            "https://dpaste.org/api/" <<< "$content" | tr -d '"'); } 2>&1
         ;;
     termbin.com)
-        { url=$(timeout $timeout nc termbin.com 9999 <<< "BASE64:$content" | tr -d '\0'); } 2>/dev/null || true
+        { url=$(timeout $timeout nc termbin.com 9999 <<< "$content" | tr -d '\0'); } 2>&1
         ;;
     ix.io)
-        { url=$(timeout $timeout curl -s -F 'f:1=<-' ix.io <<< "BASE64:$content"); } 2>/dev/null || true
+        { url=$(timeout $timeout curl -v -s -F 'f:1=<-' ix.io <<< "$content"); } 2>&1
         ;;
     esac
 
-    [[ "$url" =~ ^https?:// ]] && echo "$url" || echo "Failed: $service unavailable"
+    # Validate URL format
+    if [[ "$url" =~ ^https?:// ]]; then
+        echo "$url"
+    else
+        # Return full error output
+        echo "FAILED: ${url:-No response}"
+    fi
 }
 
 show_help() {
