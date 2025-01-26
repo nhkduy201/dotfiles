@@ -10,96 +10,99 @@ INSTALL_MODE="clean"
 BOOT_SIZE="512MiB"
 
 # Error handling and colors
-set -e
+set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
+trap 'error_handler "Script failed at line $LINENO"' ERR
 
 # Log collection setup
-exec > >(tee -a /var/log/arch-install.log)
-exec 2> >(tee -a /var/log/arch-install.log >&2)
+LOGFILE="/var/log/arch-install.log"
+exec > >(tee -a "$LOGFILE")
+exec 2> >(tee -a "$LOGFILE" >&2)
 
-error() {
+error_handler() {
     local error_msg="$1"
-    local line_no="$LINENO"
+    local line_no="$BASH_LINENO"
     local script_name=$(basename "$0")
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
-    echo -e "${RED}Error: $error_msg${NC}" >&2
-    
-    # Enhanced log collection
-    local log_content="
-=== Error Report ===
+    # Capture error context
+    local last_command=$(fc -ln -0 2>/dev/null || echo "Unknown command")
+    local exit_code=$?
+
+    # Build comprehensive error report
+    local log_content=$(cat <<EOF
+=== ERROR REPORT ===
 Timestamp: $timestamp
 Script: $script_name
-Error at line: $line_no
-Last command: $(history | tail -n1 | sed 's/^[ ]*[0-9]\+[ ]*//')
-Exit code: $?
+Line: $line_no
+Last Command: $last_command
+Exit Code: $exit_code
 Message: $error_msg
 
-=== System Information ===
+=== SYSTEM INFO ===
 Kernel: $(uname -r)
 Architecture: $(uname -m)
 Boot Mode: $([ -d "/sys/firmware/efi/efivars" ] && echo "UEFI" || echo "BIOS")
-Installation Mode: $INSTALL_MODE
+Install Mode: $INSTALL_MODE
 Target Disk: $DISK
-Mounted FS: $(mount | grep '/mnt' || echo "None")
 
-=== Disk Information ===
---- lsblk output ---
-$(lsblk -f "$DISK" 2>/dev/null || echo "Could not get lsblk info")
+=== DISK STATUS ===
+$(lsblk -f "$DISK" 2>/dev/null || echo "No disk information")
+$(parted -s "$DISK" print 2>/dev/null || echo "No partition information")
 
---- parted output ---
-$(parted "$DISK" print 2>/dev/null || echo "Could not get parted info")
+=== MOUNT STATUS ===
+$(mount | grep '/mnt' || echo "No mounts")
 
-=== Network Status ===
+=== NETWORK STATUS ===
 $(ip a 2>/dev/null || echo "No network info")
 
-=== Kernel Messages ===
+=== KERNEL LOGS ===
 $(dmesg | tail -n30 2>/dev/null || echo "No dmesg output")
 
-=== Last 100 lines of script execution ---
-$(tail -n100 /var/log/arch-install.log 2>/dev/null || echo "No log file found")
-"
+=== INSTALLATION LOGS ===
+$(tail -n200 "$LOGFILE" 2>/dev/null || echo "No log file found")
+EOF
+)
 
-    # Try multiple paste services with fallback
-    local url=""
+    # Attempt log upload
+    local upload_url=""
     for service in dpaste.org termbin.com ix.io; do
-        url=$(upload_log "$log_content" "$service")
-        if [[ $url =~ ^https?:// ]]; then
-            echo -e "${RED}Error log: $url${NC}" >&2
-            echo -e "${RED}Please share this URL for support${NC}" >&2
-            break
-        fi
+        upload_url=$(upload_log "$log_content" "$service")
+        [[ "$upload_url" =~ ^https?:// ]] && break
     done
+
+    # Display error message
+    echo -e "\n${RED}ERROR: $error_msg${NC}" >&2
+    [ -n "$upload_url" ] && echo -e "${RED}DEBUG LOG: $upload_url${NC}" >&2
+    echo -e "${RED}Please share this URL if you need support${NC}" >&2
     
     exit 1
 }
 
 upload_log() {
-    local log_content="$1"
+    local content="$1"
     local service="$2"
     local url=""
-    local max_size=524288  # 512KB
+    local max_size=500000  # ~500KB
 
-    # Truncate if needed (keep beginning and end)
-    if [ ${#log_content} -gt $max_size ]; then
-        log_content="${log_content:0:$((max_size/2))}\n[...TRUNCATED...]\n${log_content: -$((max_size/2))}"
-    fi
+    # Truncate content if too large
+    content=$(echo "$content" | head -c $max_size)
 
     case $service in
-        dpaste.org)
-            url=$(curl -s -F "content=<-" -F "hold=86400" https://dpaste.org/api/ <<< "$log_content" | awk '/^https:/ {print $1}')
-            ;;
-        termbin.com)
-            url=$(nc termbin.com 9999 <<< "$log_content" | tr -d '\0')
-            ;;
-        ix.io)
-            url=$(curl -s -F 'f:1=<-' ix.io <<< "$log_content")
-            ;;
+    dpaste.org)
+        url=$(curl -s -F "content=<-" -F "format=url" -F "lexer=text" -F "expires=86400" \
+            "https://dpaste.org/api/" <<< "$content" | tr -d '"')
+        ;;
+    termbin.com)
+        url=$(nc termbin.com 9999 <<< "$content" | tr -d '\0')
+        ;;
+    ix.io)
+        url=$(curl -s -F 'f:1=<-' ix.io <<< "$content")
+        ;;
     esac
 
-    # Validate URL format
     [[ "$url" =~ ^https?:// ]] && echo "$url" || echo ""
 }
 
