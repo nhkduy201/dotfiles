@@ -26,7 +26,7 @@ exec 2> >(tee -a "$LOGFILE" >&2)
 
 error_handler() {
     local exit_code=$?
-    local line_no="${BASH_LINENO[0]}"
+    local line_no="${BASH_LINENO[1]}"
     local script_name=$(basename "${BASH_SOURCE[0]}")
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local last_command="${BASH_COMMAND:-unknown}"
@@ -87,13 +87,14 @@ EOF
     echo -e "${RED}║                 INSTALLATION FAILED               ║${NC}"
     echo -e "${RED}╚══════════════════════════════════════════════════╝${NC}"
     echo -e "${RED}ERROR: Line $line_no - ${last_command}${NC}"
+    echo -e "${RED}Exit Code: $exit_code${NC}"
     
     # Show upload results
     echo -e "\n${RED}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${RED}║                  UPLOAD ATTEMPTS                  ║${NC}"
     echo -e "${RED}╚══════════════════════════════════════════════════╝${NC}"
     for result in "${upload_results[@]}"; do
-        if [[ "$result" == *http* ]]; then
+        if [[ "$result" == https://* ]]; then
             echo -e "${GREEN}✓ ${result%%:*}: ${result#*:}${NC}"
         else
             echo -e "${RED}✗ ${result}${NC}"
@@ -106,7 +107,6 @@ EOF
 }
 
 trap 'error_handler' ERR
-trap 'exit_handler' EXIT
 
 upload_log() {
     local content="$1"
@@ -232,36 +232,27 @@ clean_partition() {
 dual_partition() {
     echo -e "${GREEN}Detecting existing partitions...${NC}"
     
-    # Get disk size in MiB (strip non-numeric characters)
-    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("[^0-9.]", "", $3); print int($3)}')
+    # Get existing EFI partition
+    existing_efi=$(blkid -t PARTLABEL="EFI system partition" -o device | head -1)
+    [ -b "$existing_efi" ] || error_handler "No existing EFI partition found"
+    BOOT_PART="$existing_efi"
+
+    # Calculate free space using parted
+    free_space=$(parted -s "$DISK" unit MiB print free | awk '/Free Space/ {print $1,$3}' | tail -1)
+    [ -z "$free_space" ] && error_handler "No free space available"
     
-    # Find the end of the last partition (numeric value only)
-    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {gsub("[^0-9.]", "", $3); print int($3)}' | tail -n1)
-    
-    # Verify numeric values
-    [[ "$disk_size_mib" =~ ^[0-9]+$ ]] || error_handler "Invalid disk size: $disk_size_mib"
-    [[ "$last_part_end" =~ ^[0-9]+$ ]] || error_handler "Invalid partition end: $last_part_end"
-    
-    # Calculate available space
-    free_space_mib=$((disk_size_mib - last_part_end))
-    
-    # Verify minimum 10GB (10240MiB)
-    [ "$free_space_mib" -ge 10240 ] || error_handler "Need 10GB free space after last partition (found ${free_space_mib}MiB)"
-    
-    echo -e "${GREEN}Creating partition using ${free_space_mib}MiB free space...${NC}"
-    
-    # Create partition using 100% of remaining space
-    if ! parted -s "$DISK" mkpart primary ext4 "${last_part_end}MiB" "100%"; then
+    start=$(echo "$free_space" | cut -d' ' -f1 | tr -d 'MiB')
+    end=$(echo "$free_space" | cut -d' ' -f2 | tr -d 'MiB')
+    [ $((end - start)) -ge 10240 ] || error_handler "Minimum 10GB free space required"
+
+    # Create partition
+    if ! parted -s "$DISK" mkpart primary ext4 "${start}MiB" "${end}MiB"; then
         error_handler "Failed to create root partition"
     fi
     
-    # Get new partition path (handle NVMe vs SATA)
-    ROOT_PART=$(lsblk -lp "$DISK" | awk '/part$/ && !/EFI/ {print $1}' | tail -n1)
-    [ -b "$ROOT_PART" ] || error_handler "Failed to identify root partition"
-    
-    # Get existing EFI partition
-    BOOT_PART=$(lsblk -lp "$DISK" | awk '/EFI/ {print $1}')
-    [ -b "$BOOT_PART" ] || error_handler "Failed to identify EFI partition"
+    # Get new partition
+    ROOT_PART=$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -1)
+    ROOT_PART="${DISK}p${ROOT_PART}"
 }
 
 # Secure Boot setup
