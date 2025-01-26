@@ -228,10 +228,10 @@ dual_partition() {
     echo -e "${GREEN}Detecting existing partitions...${NC}"
     
     # Get disk size in MiB (strip non-numeric characters)
-    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("[^0-9]", "", $3); print $3}')
+    disk_size_mib=$(parted -s "$DISK" unit MiB print | awk '/^Disk/ {gsub("[^0-9.]", "", $3); print int($3)}')
     
     # Find the end of the last partition (numeric value only)
-    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {gsub("[^0-9]", "", $3); print $3}' | tail -n1)
+    last_part_end=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+/ {gsub("[^0-9.]", "", $3); print int($3)}' | tail -n1)
     
     # Verify numeric values
     [[ "$disk_size_mib" =~ ^[0-9]+$ ]] || error_handler "Invalid disk size: $disk_size_mib"
@@ -250,11 +250,13 @@ dual_partition() {
         error_handler "Failed to create root partition"
     fi
     
-    # Get new partition path
-    ROOT_PART=$(parted -s "$DISK" print | awk '/ext4/ {print $1}' | tail -n1)
-    ROOT_PART="${DISK}p${ROOT_PART}"
-    existing_efi=$(parted -s "$DISK" print | awk '/esp/ {print $1}' | head -1)
-    BOOT_PART="${DISK}p${existing_efi}"
+    # Get new partition path (handle NVMe vs SATA)
+    ROOT_PART=$(lsblk -lp "$DISK" | awk '/part$/ && !/EFI/ {print $1}' | tail -n1)
+    [ -b "$ROOT_PART" ] || error_handler "Failed to identify root partition"
+    
+    # Get existing EFI partition
+    BOOT_PART=$(lsblk -lp "$DISK" | awk '/EFI/ {print $1}')
+    [ -b "$BOOT_PART" ] || error_handler "Failed to identify EFI partition"
 }
 
 # Secure Boot setup
