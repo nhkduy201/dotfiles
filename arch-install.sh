@@ -67,18 +67,33 @@ $(tail -n200 "$LOGFILE" 2>/dev/null || echo "No log file found")
 EOF
 )
 
-    # Attempt log upload
-    local upload_url=""
+    # Attempt log upload with error capture
+    local upload_errors=()
     for service in dpaste.org termbin.com ix.io; do
-        upload_url=$(upload_log "$log_content" "$service")
-        [[ "$upload_url" =~ ^https?:// ]] && break
+        result=$(upload_log "$log_content" "$service")
+        
+        if [[ "$result" =~ ^https?:// ]]; then
+            upload_url="$result"
+            break
+        elif [[ "$result" == SERVICE_FAILURE:* ]]; then
+            IFS=':' read -ra parts <<< "$result"
+            service_name="${parts[1]}"
+            error_details="${parts[*]:2}"
+            upload_errors+=("$service_name failed: $error_details")
+        fi
     done
 
     # Display error message
     echo -e "\n${RED}ERROR: $error_msg${NC}" >&2
-    [ -n "$upload_url" ] && echo -e "${RED}DEBUG LOG: $upload_url${NC}" >&2
-    [ -z "$upload_url" ] && echo -e "${RED}Log upload failed - see $LOGFILE${NC}" >&2
-    echo -e "${RED}Installation failed - please share the debug URL if seeking help${NC}" >&2
+    if [ -n "$upload_url" ]; then
+        echo -e "${RED}DEBUG LOG: $upload_url${NC}" >&2
+    else
+        echo -e "${RED}Log upload failed for all services:${NC}" >&2
+        for err in "${upload_errors[@]}"; do
+            echo -e "${RED} • $err${NC}" >&2
+        done
+        echo -e "${RED}Local log preserved at: $LOGFILE${NC}" >&2
+    fi
     
     exit 1
 }
@@ -87,25 +102,38 @@ upload_log() {
     local content="$1"
     local service="$2"
     local url=""
-    local max_size=500000  # ~500KB
+    local max_size=500000
+    local err_file="/tmp/upload_error.log"
 
-    # Truncate content if needed
+    # Truncate content
     content=$(echo "$content" | head -c $max_size)
+
+    # Create fresh error file
+    echo "Upload attempt to $service" > "$err_file"
 
     case $service in
     dpaste.org)
-        url=$(curl -s -F "content=<-" -F "format=url" -F "lexer=text" -F "expires=86400" \
-            "https://dpaste.org/api/" <<< "$content" | tr -d '"' 2>/dev/null) || true
+        url=$(curl -v -s -F "content=<-" -F "format=url" -F "lexer=text" -F "expires=86400" \
+            "https://dpaste.org/api/" <<< "$content" 2>> "$err_file" | tr -d '"')
         ;;
     termbin.com)
-        url=$(timeout 10 nc termbin.com 9999 <<< "$content" | tr -d '\0' 2>/dev/null) || true
+        url=$(timeout 10 nc -v termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
         ;;
     ix.io)
-        url=$(curl -s -F 'f:1=<-' ix.io <<< "$content" 2>/dev/null) || true
+        url=$(curl -v -s -F 'f:1=<-' ix.io <<< "$content" 2>> "$err_file")
         ;;
     esac
 
-    [[ "$url" =~ ^https?:// ]] && echo "$url" || echo ""
+    # Capture service-specific error info
+    local service_error=$(<"$err_file")
+    rm -f "$err_file"
+
+    if [[ "$url" =~ ^https?:// ]]; then
+        echo "$url"
+    else
+        # Return error details in specific format
+        echo "SERVICE_FAILURE:$service:$service_error"
+    fi
 }
 
 show_help() {
