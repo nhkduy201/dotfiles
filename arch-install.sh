@@ -70,11 +70,16 @@ $(tail -n200 "$LOGFILE" 2>/dev/null || echo "No log file found")
 EOF
 )
 
-    # Attempt uploads and collect diagnostics
+    # Attempt uploads in new priority order
     local upload_results=()
-    for service in dpaste.org termbin.com ix.io; do
+    for service in termbin.com dpaste.org ix.io; do
         result=$(upload_log "$log_content" "$service" 2>&1 || true)
-        upload_results+=("$service: $result")
+        if [[ "$result" == http* ]]; then
+            upload_results+=("$service: $result")
+            break  # Stop after first successful upload
+        else
+            upload_results+=("$service: $result")
+        fi
     done
 
     # Display error context
