@@ -72,7 +72,10 @@ EOF
 
     # Attempt log upload with error capture
     local upload_errors=()
-    for service in dpaste.org termbin.com ix.io; do
+    local upload_url=""
+    
+    # Try services in order of reliability
+    for service in termbin.com dpaste.org ix.io; do
         result=$(upload_log "$log_content" "$service")
         
         if [[ "$result" =~ ^https?:// ]]; then
@@ -89,13 +92,17 @@ EOF
     # Display error message
     echo -e "\n${RED}ERROR: $error_msg${NC}" >&2
     if [ -n "$upload_url" ]; then
-        echo -e "${RED}DEBUG LOG: $upload_url${NC}" >&2
+        echo -e "${GREEN}DEBUG LOG: $upload_url${NC}" >&2
     else
         echo -e "${RED}Log upload failed for all services:${NC}" >&2
         for err in "${upload_errors[@]}"; do
             echo -e "${RED} • $err${NC}" >&2
         done
         echo -e "${RED}Local log preserved at: $LOGFILE${NC}" >&2
+        
+        # Display last 20 lines of log for immediate debugging
+        echo -e "\n${RED}Last 20 lines of log:${NC}"
+        tail -n20 "$LOGFILE" | sed 's/^/  /'
     fi
     
     exit 1
@@ -108,7 +115,7 @@ upload_log() {
     local max_size=500000
     local err_file="/tmp/upload_error.log"
 
-    # Truncate content
+    # Truncate content if needed
     content=$(echo "$content" | head -c $max_size)
 
     # Create fresh error file
@@ -120,7 +127,13 @@ upload_log() {
             "https://dpaste.org/api/" <<< "$content" 2>> "$err_file" | tr -d '"')
         ;;
     termbin.com)
-        url=$(timeout 10 nc -v termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
+        # Enhanced termbin upload with timeout and retries
+        for attempt in {1..3}; do
+            echo "Attempt $attempt to termbin.com" >> "$err_file"
+            url=$(timeout 10 nc -v -w 5 termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
+            [[ "$url" =~ ^https?:// ]] && break
+            sleep 1
+        done
         ;;
     ix.io)
         url=$(curl -v -s -F 'f:1=<-' ix.io <<< "$content" 2>> "$err_file")
