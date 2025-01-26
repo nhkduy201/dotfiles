@@ -29,6 +29,9 @@ error_handler() {
     local script_name=$(basename "$0")
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
+    # Initialize upload_url
+    local upload_url=""
+    
     # Capture error context
     local last_command=$(history 1 | sed 's/^[ ]*[0-9]\+[ ]*//')
     local exit_code=$?
