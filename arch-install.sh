@@ -115,28 +115,27 @@ upload_log() {
     local max_size=500000
     local err_file="/tmp/upload_error.log"
 
-    # Truncate content if needed
+    # Truncate content
     content=$(echo "$content" | head -c $max_size)
 
-    # Create fresh error file
-    echo "Upload attempt to $service" > "$err_file"
+    echo "Attempting upload to $service" > "$err_file"
 
+    # Add HTTP-based fallbacks and timeouts
     case $service in
     dpaste.org)
-        url=$(curl -v -s -F "content=<-" -F "format=url" -F "lexer=text" -F "expires=86400" \
-            "https://dpaste.org/api/" <<< "$content" 2>> "$err_file" | tr -d '"')
+        # Try both POST methods
+        url=$(curl -v -s -F "content=<-" "https://dpaste.org/api/" <<< "$content" 2>> "$err_file" | tr -d '"')
+        [ -z "$url" ] && url=$(curl -v -s --data-urlencode "content@-" "https://dpaste.org/api/" <<< "$content" 2>> "$err_file")
         ;;
     termbin.com)
-        # Enhanced termbin upload with timeout and retries
-        for attempt in {1..3}; do
-            echo "Attempt $attempt to termbin.com" >> "$err_file"
-            url=$(timeout 10 nc -v -w 5 termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
-            [[ "$url" =~ ^https?:// ]] && break
-            sleep 1
-        done
+        # Try both netcat and HTTP fallback
+        url=$(timeout 10 nc -v -w 5 termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
+        [ -z "$url" ] && url=$(curl -v -s -F 'f:1=<-' https://termbin.com/ <<< "$content" 2>> "$err_file")
         ;;
     ix.io)
-        url=$(curl -v -s -F 'f:1=<-' ix.io <<< "$content" 2>> "$err_file")
+        # Alternative ix.io endpoint
+        url=$(curl -v -s -F 'f:1=<-' https://ix.io/ <<< "$content" 2>> "$err_file")
+        [ -z "$url" ] && url=$(curl -v -s --data-urlencode "f:1@-" https://ix.io/ <<< "$content" 2>> "$err_file")
         ;;
     esac
 
@@ -144,11 +143,12 @@ upload_log() {
     local service_error=$(<"$err_file")
     rm -f "$err_file"
 
-    if [[ "$url" =~ ^https?:// ]]; then
+    # Additional validation for URL format
+    if [[ "$url" =~ ^https?:// ]] && curl -s --head "$url" &>/dev/null; then
         echo "$url"
     else
-        # Return error details in specific format
-        echo "SERVICE_FAILURE:$service:$service_error"
+        # Enhanced error reporting
+        echo "SERVICE_FAILURE:$service:${service_error//$'\n'/ }"
     fi
 }
 
