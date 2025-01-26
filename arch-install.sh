@@ -10,54 +10,54 @@ INSTALL_MODE="clean"
 BOOT_SIZE="512MiB"
 
 # Error handling and colors
-set -euo pipefail
+set -eo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
-trap 'error_handler "Script failed at line $LINENO"' ERR
+shopt -s extdebug
 
-# Install required tools early
-pacman -Sy --noconfirm curl openbsd-netcat &>/dev/null || true
+# Install required tools early (suppress errors)
+{ pacman -Sy --noconfirm curl openbsd-netcat &>/dev/null; } || true
 
 # Log collection setup
-LOGFILE="/var/log/arch-install.log"
+LOGFILE="/var/log/arch-install-$(date +%s).log"
 exec > >(tee -a "$LOGFILE")
 exec 2> >(tee -a "$LOGFILE" >&2)
 
 error_handler() {
-    local error_msg="$1"
-    local script_name=$(basename "$0")
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    # Initialize upload_url
-    local upload_url=""
-    
-    # Capture error context
-    local last_command=$(history 1 | sed 's/^[ ]*[0-9]\+[ ]*//')
     local exit_code=$?
+    local line_no="${BASH_LINENO[0]}"
+    local script_name=$(basename "${BASH_SOURCE[0]}")
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local last_command="${BASH_COMMAND:-unknown}"
 
-    # Build comprehensive error report
+    # Ensure safe variable access
+    local disk_info="Disk: ${DISK:-unset}"
+    local install_mode="Mode: ${INSTALL_MODE:-unset}"
+    local mount_status=$(mount | grep '/mnt' || echo "No mounts")
+
+    # Build error report with failsafes
     local log_content=$(cat <<EOF
 === ERROR REPORT ===
 Timestamp: $timestamp
 Script: $script_name
+Line: ${line_no:-unknown}
 Last Command: $last_command
 Exit Code: $exit_code
-Message: $error_msg
 
 === SYSTEM INFO ===
-Kernel: $(uname -r)
-Architecture: $(uname -m)
+Kernel: $(uname -r 2>/dev/null || echo "unknown")
+Architecture: $(uname -m 2>/dev/null || echo "unknown")
 Boot Mode: $([ -d "/sys/firmware/efi/efivars" ] && echo "UEFI" || echo "BIOS")
-Install Mode: $INSTALL_MODE
-Target Disk: $DISK
+$install_mode
+$disk_info
 
 === DISK STATUS ===
-$(lsblk -f "$DISK" 2>/dev/null || echo "No disk information")
-$(parted -s "$DISK" print 2>/dev/null || echo "No partition information")
+$(lsblk -f "${DISK:-/dev/null}" 2>/dev/null || echo "No disk information")
+$(parted -s "${DISK:-/dev/null}" print 2>/dev/null || echo "No partition information")
 
 === MOUNT STATUS ===
-$(mount | grep '/mnt' || echo "No mounts")
+$mount_status
 
 === NETWORK STATUS ===
 $(ip -brief address 2>/dev/null || echo "No network info")
@@ -70,86 +70,66 @@ $(tail -n200 "$LOGFILE" 2>/dev/null || echo "No log file found")
 EOF
 )
 
-    # Attempt log upload with error capture
-    local upload_errors=()
-    local upload_url=""
-    
-    # Try services in order of reliability
-    for service in termbin.com dpaste.org ix.io; do
-        result=$(upload_log "$log_content" "$service")
-        
-        if [[ "$result" =~ ^https?:// ]]; then
-            upload_url="$result"
-            break
-        elif [[ "$result" == SERVICE_FAILURE:* ]]; then
-            IFS=':' read -ra parts <<< "$result"
-            service_name="${parts[1]}"
-            error_details="${parts[*]:2}"
-            upload_errors+=("$service_name failed: $error_details")
-        fi
+    # Attempt uploads and collect diagnostics
+    local upload_results=()
+    for service in dpaste.org termbin.com ix.io; do
+        result=$(upload_log "$log_content" "$service" 2>&1 || true)
+        upload_results+=("$service: $result")
     done
 
-    # Display error message
-    echo -e "\n${RED}ERROR: $error_msg${NC}" >&2
-    if [ -n "$upload_url" ]; then
-        echo -e "${GREEN}DEBUG LOG: $upload_url${NC}" >&2
-    else
-        echo -e "${RED}Log upload failed for all services:${NC}" >&2
-        for err in "${upload_errors[@]}"; do
-            echo -e "${RED} • $err${NC}" >&2
-        done
-        echo -e "${RED}Local log preserved at: $LOGFILE${NC}" >&2
-        
-        # Display last 20 lines of log for immediate debugging
-        echo -e "\n${RED}Last 20 lines of log:${NC}"
-        tail -n20 "$LOGFILE" | sed 's/^/  /'
-    fi
+    # Display error context
+    echo -e "\n${RED}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║                 INSTALLATION FAILED               ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}ERROR: Line $line_no - ${last_command}${NC}"
     
-    exit 1
+    # Show upload results
+    echo -e "\n${RED}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║                  UPLOAD ATTEMPTS                  ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════╝${NC}"
+    for result in "${upload_results[@]}"; do
+        if [[ "$result" == *http* ]]; then
+            echo -e "${GREEN}✓ ${result%%:*}: ${result#*:}${NC}"
+        else
+            echo -e "${RED}✗ ${result}${NC}"
+        fi
+    done
+    
+    # Preserve local log
+    echo -e "\n${RED}Local log preserved at: $LOGFILE${NC}"
+    exit $exit_code
 }
+
+trap 'error_handler' ERR
+trap 'exit_handler' EXIT
 
 upload_log() {
     local content="$1"
     local service="$2"
+    local max_size=50000  # 50KB for better compatibility
+    local timeout=10
     local url=""
-    local max_size=500000
-    local err_file="/tmp/upload_error.log"
+    
+    # Trim content to last 50KB and convert to base64
+    content=$(echo "$content" | tail -c $max_size | base64 -w0)
 
-    # Truncate content
-    content=$(echo "$content" | head -c $max_size)
-
-    echo "Attempting upload to $service" > "$err_file"
-
-    # Add HTTP-based fallbacks and timeouts
     case $service in
     dpaste.org)
-        # Try both POST methods
-        url=$(curl -v -s -F "content=<-" "https://dpaste.org/api/" <<< "$content" 2>> "$err_file" | tr -d '"')
-        [ -z "$url" ] && url=$(curl -v -s --data-urlencode "content@-" "https://dpaste.org/api/" <<< "$content" 2>> "$err_file")
+        { url=$(timeout $timeout curl -s -X POST "https://dpaste.org/api/" \
+            -F "content=<-" \
+            -F "format=url" \
+            -F "lexer=text" \
+            <<< "$content" | tr -d '"'); } 2>/dev/null || true
         ;;
     termbin.com)
-        # Try both netcat and HTTP fallback
-        url=$(timeout 10 nc -v -w 5 termbin.com 9999 <<< "$content" 2>> "$err_file" | tr -d '\0')
-        [ -z "$url" ] && url=$(curl -v -s -F 'f:1=<-' https://termbin.com/ <<< "$content" 2>> "$err_file")
+        { url=$(timeout $timeout nc termbin.com 9999 <<< "BASE64:$content" | tr -d '\0'); } 2>/dev/null || true
         ;;
     ix.io)
-        # Alternative ix.io endpoint
-        url=$(curl -v -s -F 'f:1=<-' https://ix.io/ <<< "$content" 2>> "$err_file")
-        [ -z "$url" ] && url=$(curl -v -s --data-urlencode "f:1@-" https://ix.io/ <<< "$content" 2>> "$err_file")
+        { url=$(timeout $timeout curl -s -F 'f:1=<-' ix.io <<< "BASE64:$content"); } 2>/dev/null || true
         ;;
     esac
 
-    # Capture service-specific error info
-    local service_error=$(<"$err_file")
-    rm -f "$err_file"
-
-    # Additional validation for URL format
-    if [[ "$url" =~ ^https?:// ]] && curl -s --head "$url" &>/dev/null; then
-        echo "$url"
-    else
-        # Enhanced error reporting
-        echo "SERVICE_FAILURE:$service:${service_error//$'\n'/ }"
-    fi
+    [[ "$url" =~ ^https?:// ]] && echo "$url" || echo "Failed: $service unavailable"
 }
 
 show_help() {
@@ -341,10 +321,13 @@ EOF
 umount -R /mnt
 
 # Final message
-echo -e "${GREEN}Installation completed successfully!${NC}"
+echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║           INSTALLATION SUCCESSFUL!              ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo -e "Next steps:"
 echo "1. Reboot: systemctl reboot"
 echo "2. Remove installation media"
 echo "3. Login with: $USERNAME / $PASSWORD"
 echo "4. Change password using 'passwd'"
 echo "5. Check Secure Boot status in BIOS if needed"
+echo -e "Local installation log preserved at: $LOGFILE"
