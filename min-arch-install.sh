@@ -45,9 +45,16 @@ if [[ $INSTALL_MODE == "clean" ]]; then
 else
     BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/{print $1}' | head -1)
     [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "No valid EFI partition found"; exit 1; }
-    FREE_SPACE=$(parted -s "$DISK" unit MiB print free | awk '/Free Space/ && $4>10240{print $1 " " $4}' | sort -k2rn | head -1 | cut -d' ' -f1)
-    [[ -n $FREE_SPACE ]] || { echo "Need 10GB+ free space"; exit 1; }
-    parted -s "$DISK" mkpart primary ext4 "${FREE_SPACE}MiB" 100%
+    LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{last=$3}END{gsub("MiB", "", last); print last}')
+    START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
+    DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB", "", $3); print $3}')
+    AVAILABLE_SPACE=$(awk "BEGIN {print $DISK_SIZE - $START_POINT}")
+    
+    if (( $(awk "BEGIN {print ($AVAILABLE_SPACE < 10240)}") )); then
+        echo "Need 10GB+ free space (only ${AVAILABLE_SPACE}MiB available)"
+        exit 1
+    fi
+    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
     ROOT_PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)
     ROOT_PART="${DISK}p${ROOT_PART_NUM}"
 fi
