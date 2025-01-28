@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
 pacman -Sy --noconfirm curl netcat
