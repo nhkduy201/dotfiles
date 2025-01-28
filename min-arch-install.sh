@@ -67,7 +67,7 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring
 pacman -Syy
-pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel ibus-bamboo fuse2
+pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2
 genfstab -U /mnt >> /mnt/etc/fstab
 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
@@ -100,7 +100,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git || { echo "Failed to clone paru"; exit 1; }
 cd paru-bin && makepkg -si --noconfirm || { echo "Failed to install paru"; exit 1; }
-BASE_PACKAGES="i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh"
+BASE_PACKAGES="i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus ibus-bamboo"
 if [[ "$BROWSER" == "edge" ]]; then
     BROWSER_PACKAGE="microsoft-edge-stable-bin"
 else
