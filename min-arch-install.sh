@@ -100,13 +100,13 @@ grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git || { echo "Failed to clone paru"; exit 1; }
 cd paru-bin && makepkg -si --noconfirm || { echo "Failed to install paru"; exit 1; }
-BASE_PACKAGES="i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus ibus-bamboo"
+paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus || exit 1
+paru -S --noconfirm ibus-bamboo || exit 1
 if [[ "$BROWSER" == "edge" ]]; then
-    BROWSER_PACKAGE="microsoft-edge-stable-bin"
+    paru -S --noconfirm microsoft-edge-stable-bin || exit 1
 else
-    BROWSER_PACKAGE="librewolf-bin"
+    paru -S --noconfirm librewolf-bin || exit 1
 fi
-paru -S --noconfirm $BASE_PACKAGES $BROWSER_PACKAGE || { echo "Failed to install $BROWSER_PACKAGE and dependencies"; exit 1; }
 cd ~
 git clone https://github.com/imShara/l5p-kbl || { echo "Failed to clone l5p-kbl"; exit 1; }
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
