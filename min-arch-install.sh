@@ -21,6 +21,7 @@ HOSTNAME="archlinux"
 USERNAME="kayd"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean"
+BROWSER="librewolf"
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] || { echo "Requires UEFI"; exit 1; }
 [[ -b $DISK ]] || { echo "Disk not found: $DISK"; exit 1; }
@@ -29,11 +30,13 @@ while [[ $# -gt 0 ]]; do
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
         -d|--disk) DISK="$2"; shift 2 ;;
         -p|--password) PASSWORD="$2"; shift 2 ;;
-        *) echo "Usage: $0 [-d disk] [-m clean|dual] -p password"; exit 1 ;;
+        -b|--browser) BROWSER="$2"; shift 2 ;;
+        *) echo "Usage: $0 [-d disk] [-m clean|dual] [-b edge|librewolf] -p password"; exit 1 ;;
     esac
 done
 [[ -n $PASSWORD ]] || { echo "Password required"; exit 1; }
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
+[[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
 if [[ $INSTALL_MODE == "clean" ]]; then
     parted -s "$DISK" mklabel gpt mkpart primary fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
     BOOT_PART="${DISK}p1"
@@ -90,7 +93,13 @@ grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git || { echo "Failed to clone paru"; exit 1; }
 cd paru-bin && makepkg -si --noconfirm || { echo "Failed to install paru"; exit 1; }
-paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh microsoft-edge-stable-bin || { echo "Failed to install packages"; exit 1; }
+BASE_PACKAGES="i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh"
+if [[ "$BROWSER" == "edge" ]]; then
+    BROWSER_PACKAGE="microsoft-edge-stable-bin"
+else
+    BROWSER_PACKAGE="librewolf-bin"
+fi
+paru -S --noconfirm $BASE_PACKAGES $BROWSER_PACKAGE || { echo "Failed to install $BROWSER_PACKAGE and dependencies"; exit 1; }
 cd ~
 git clone https://github.com/imShara/l5p-kbl || { echo "Failed to clone l5p-kbl"; exit 1; }
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
