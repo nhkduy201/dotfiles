@@ -49,7 +49,6 @@ else
     START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
     DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB", "", $3); print $3}')
     AVAILABLE_SPACE=$(awk "BEGIN {print $DISK_SIZE - $START_POINT}")
-    
     if (( $(awk "BEGIN {print ($AVAILABLE_SPACE < 10240)}") )); then
         echo "Need 10GB+ free space (only ${AVAILABLE_SPACE}MiB available)"
         exit 1
@@ -82,7 +81,7 @@ echo "127.0.0.1 localhost
 echo "root:$PASSWORD" | chpasswd
 useradd -m -G wheel "$USERNAME"
 echo "$USERNAME:$PASSWORD" | chpasswd
-echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 fallocate -l 4G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
@@ -98,19 +97,18 @@ mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
-cd /tmp && git clone https://aur.archlinux.org/paru-bin.git || { echo "Failed to clone paru"; exit 1; }
-cd paru-bin && makepkg -si --noconfirm || { echo "Failed to install paru"; exit 1; }
-paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus || exit 1
-paru -S --noconfirm ibus-bamboo || exit 1
+cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
+cd paru-bin && makepkg -si --noconfirm
+paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus
+paru -S --noconfirm ibus-bamboo
 if [[ "$BROWSER" == "edge" ]]; then
-    paru -S --noconfirm microsoft-edge-stable-bin || exit 1
+    paru -S --noconfirm microsoft-edge-stable-bin
 else
-    paru -S --noconfirm librewolf-bin || exit 1
+    paru -S --noconfirm librewolf-bin
 fi
 cd ~
-git clone https://github.com/imShara/l5p-kbl || { echo "Failed to clone l5p-kbl"; exit 1; }
+git clone https://github.com/imShara/l5p-kbl
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
 echo "sudo python \$(find ~ -name l5p_kbl.py) static a020f0" >> ~/.xinitrc
 echo "exec i3" >> ~/.xinitrc
 chmod +x ~/.xinitrc
@@ -125,9 +123,10 @@ X-GNOME-Autostart-Phase=Applications" > ~/.config/autostart/ibus.desktop
 echo "export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
 export QT_IM_MODULE=ibus" > ~/.xprofile
-gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
-gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
 USERCMD
+mkdir -p /etc/sudoers.d
+echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
+chmod 440 /etc/sudoers.d/l5p-kbl
 mkdir -p /etc/X11/xorg.conf.d
 echo 'Section "InputClass"
     Identifier "libinput touchpad catchall"
