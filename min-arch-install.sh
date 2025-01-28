@@ -1,5 +1,21 @@
 #!/bin/bash
 set -eo pipefail
+trap 'error_log "Error on line $LINENO"' ERR
+pacman -Sy --noconfirm curl netcat
+error_log() {
+    local error_msg="$1"
+    local log_content="
+Error: $error_msg
+Time: $(date)
+Disk info:
+$(fdisk -l $DISK)
+$(lsblk -f $DISK)
+Last commands:
+$(tail -n 20 /var/log/min-arch.log)"
+    echo "$log_content" | nc termbin.com 9999
+}
+exec 1> >(tee -a /var/log/min-arch.log)
+exec 2> >(tee -a /var/log/min-arch.log >&2)
 DISK="/dev/nvme0n1"
 HOSTNAME="archlinux"
 USERNAME="kayd"
