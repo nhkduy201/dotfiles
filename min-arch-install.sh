@@ -136,6 +136,7 @@ echo "exec i3" >> ~/.xinitrc
 chmod +x ~/.xinitrc
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
+sed -i 's/Mod1/\$mod/g' ~/.config/i3/config
 sed -i '1i set $mod Mod4' ~/.config/i3/config
 sed -i '1a workspace_layout tabbed' ~/.config/i3/config
 sed -i 's/\$mod+h/\$mod+Shift+h/
@@ -162,6 +163,19 @@ EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 EOF
 sync
-fuser -km /mnt
-umount -R /mnt
-echo "Installation complete. Run 'startx' after reboot to start i3."
+if mountpoint -q /mnt; then
+  if ! command -v fuser &>/dev/null; then
+    pacman -Sy --noconfirm psmisc
+  fi
+  for attempt in {1..3}; do
+    fuser -km /mnt || true
+    sleep 2
+    if umount -R /mnt; then
+      break
+    elif [[ $attempt -eq 3 ]]; then
+      echo "ERROR: Failed to unmount /mnt after 3 attempts"
+      exit 1
+    fi
+  done
+fi
+reboot
