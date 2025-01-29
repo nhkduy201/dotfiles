@@ -58,6 +58,7 @@ else
     ROOT_PART="${DISK}p${ROOT_PART_NUM}"
 fi
 mkfs.ext4 -F "$ROOT_PART"
+sync
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
@@ -109,20 +110,28 @@ fi
 cd ~
 git clone https://github.com/imShara/l5p-kbl
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-echo "sudo python \$(find ~ -name l5p_kbl.py) static a020f0" >> ~/.xinitrc
+echo "export GTK_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+export QT_IM_MODULE=ibus
+ibus-daemon -drx &" >> ~/.xinitrc
+echo "sudo python \$HOME/l5p-kbl/l5p_kbl.py static a020f0" >> ~/.xinitrc
 echo "exec i3" >> ~/.xinitrc
 chmod +x ~/.xinitrc
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
-mkdir -p ~/.config/autostart
-echo "[Desktop Entry]
-Type=Application
-Name=IBus
-Exec=ibus-daemon -drx
-X-GNOME-Autostart-Phase=Applications" > ~/.config/autostart/ibus.desktop
-echo "export GTK_IM_MODULE=ibus
-export XMODIFIERS=@im=ibus
-export QT_IM_MODULE=ibus" > ~/.xprofile
+if ! grep -q "set \$mod" ~/.config/i3/config; then
+    sed -i '1i set $mod Mod4' ~/.config/i3/config
+fi
+sed -i '1a workspace_layout tabbed' ~/.config/i3/config
+sed -i 's/\$mod+h/\$mod+Shift+h/' ~/.config/i3/config
+sed -i 's/\$mod+l/\$mod+Shift+l/' ~/.config/i3/config
+sed -i '/bindsym .*focus/d' ~/.config/i3/config
+echo "bindsym \$mod+h focus left
+bindsym \$mod+j focus down
+bindsym \$mod+k focus up
+bindsym \$mod+l focus right" >> ~/.config/i3/config
+echo "startx" >> ~/.bashrc
+rm -rf /tmp/paru-bin
 USERCMD
 mkdir -p /etc/sudoers.d
 echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
@@ -137,5 +146,7 @@ echo 'Section "InputClass"
 EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 EOF
+sync
+fuser -km /mnt
 umount -R /mnt
 echo "Installation complete. Run 'startx' after reboot to start i3."
