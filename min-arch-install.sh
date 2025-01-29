@@ -16,7 +16,6 @@ $(tail -n 20 /var/log/min-arch.log)"
 }
 exec 1> >(tee -a /var/log/min-arch.log)
 exec 2> >(tee -a /var/log/min-arch.log >&2)
-DISK="/dev/nvme0n1"
 HOSTNAME="archlinux"
 USERNAME="kayd"
 TIMEZONE="Asia/Ho_Chi_Minh"
@@ -25,6 +24,8 @@ BROWSER="librewolf"
 UEFI_MODE=0
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
+DISK=$(lsblk -dno NAME | grep -E '^(nvme|sda|vda)' | head -1)
+DISK="/dev/$DISK"
 [[ -b $DISK ]] || { echo "Disk not found: $DISK"; exit 1; }
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -46,8 +47,8 @@ if [[ $INSTALL_MODE == "clean" ]]; then
         mkfs.fat -F32 "$BOOT_PART"
     else
         parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 512MiB set 1 boot on mkpart primary ext4 512MiB 100%
-        BOOT_PART="${DISK}p1"
-        ROOT_PART="${DISK}p2"
+        BOOT_PART="${DISK}1"
+        ROOT_PART="${DISK}2"
         mkfs.ext4 "$BOOT_PART"
     fi
 else
