@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
 pacman -Sy --noconfirm curl netcat
@@ -39,17 +39,36 @@ done
 [[ -n $PASSWORD ]] || { echo "Password required"; exit 1; }
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
-if [[ $INSTALL_MODE == "dual" ]]; then
-    EFI_PART=$(fdisk -l "$DISK" | awk '/EFI System/{print $1}' | head -1)
-    if [[ ! -n $EFI_PART || ! -b $EFI_PART || $(blkid -s TYPE -o value "$EFI_PART") != "vfat" ]]; then
-        parted -s "$DISK" mkpart ESP fat32 1MiB 512MiB set 1 esp on
-        EFI_PART_NUM=1
-        if [[ $DISK == *"nvme"* ]]; then
-            EFI_PART="${DISK}p${EFI_PART_NUM}"
+if [[ $INSTALL_MODE == "clean" ]]; then
+    if [[ $UEFI_MODE -eq 1 ]]; then
+        parted -s "$DISK" mklabel gpt mkpart primary fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
+        BOOT_PART="${DISK}p1"
+        ROOT_PART="${DISK}p2"
+        mkfs.fat -F32 "$BOOT_PART"
+    else
+        parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 512MiB set 1 boot on mkpart primary ext4 512MiB 100%
+        BOOT_PART="${DISK}1"
+        ROOT_PART="${DISK}2"
+        mkfs.ext4 "$BOOT_PART"
+    fi
+else
+    if [[ $UEFI_MODE -eq 1 ]]; then
+        # Enhanced EFI partition detection
+        BOOT_PART_NUM=$(LANG=C parted -s "$DISK" print | awk '/esp/ {print $1}' | head -1)
+        if [[ -n $BOOT_PART_NUM ]]; then
+            if [[ $DISK =~ nvme[0-9]n[0-9]$ ]] || [[ $DISK =~ mmcblk[0-9]+$ ]]; then
+                BOOT_PART="${DISK}p${BOOT_PART_NUM}"
+            else
+                BOOT_PART="${DISK}${BOOT_PART_NUM}"
+            fi
+            [[ $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "EFI partition $BOOT_PART is not vfat"; exit 1; }
         else
-            EFI_PART="${DISK}${EFI_PART_NUM}"
+            echo "No EFI System Partition found. Create an ESP and rerun."
+            exit 1
         fi
-        mkfs.fat -F32 "$EFI_PART"
+    else
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/{print $1}' | head -1)
+        [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "ext4" ]] || { echo "No valid boot partition found"; exit 1; }
     fi
     LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{last=$3}END{gsub("MiB", "", last); print last}')
     START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
@@ -61,32 +80,17 @@ if [[ $INSTALL_MODE == "dual" ]]; then
     fi
     parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
     ROOT_PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)
-    if [[ $DISK == *"nvme"* ]]; then
+    if [[ $DISK =~ nvme[0-9]n[0-9]$ ]] || [[ $DISK =~ mmcblk[0-9]+$ ]]; then
         ROOT_PART="${DISK}p${ROOT_PART_NUM}"
     else
         ROOT_PART="${DISK}${ROOT_PART_NUM}"
-    fi
-    mkfs.ext4 -F "$ROOT_PART"
-else
-    if [[ $UEFI_MODE -eq 1 ]]; then
-        parted -s "$DISK" mklabel gpt mkpart ESP fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
-        BOOT_PART="${DISK}p1"
-        ROOT_PART="${DISK}p2"
-        mkfs.fat -F32 "$BOOT_PART"
-    else
-        parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 512MiB set 1 boot on mkpart primary ext4 512MiB 100%
-        BOOT_PART="${DISK}1"
-        ROOT_PART="${DISK}2"
-        mkfs.ext4 "$BOOT_PART"
     fi
 fi
 mkfs.ext4 -F "$ROOT_PART"
 sync
 mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot/efi
-if [[ $INSTALL_MODE == "dual" ]]; then
-    mount "$EFI_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
-elif [[ $UEFI_MODE -eq 1 ]]; then
+mkdir -p /mnt/boot
+if [[ $UEFI_MODE -eq 1 ]]; then
     mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
 else
     mount "$BOOT_PART" /mnt/boot || { echo "Failed mounting boot partition"; umount /mnt; exit 1; }
@@ -96,6 +100,7 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring
 pacman -Syy
+# Added os-prober to pacstrap
 pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober
 genfstab -U /mnt >> /mnt/etc/fstab
 arch-chroot /mnt /bin/bash <<EOF
@@ -124,12 +129,13 @@ FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
-sed -i 's/#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 if [[ $UEFI_MODE -eq 1 ]]; then
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
     grub-install --target=i386-pc "$DISK"
 fi
+# Enable os-prober
+echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
