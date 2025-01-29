@@ -22,8 +22,9 @@ USERNAME="kayd"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean"
 BROWSER="librewolf"
+UEFI_MODE=0
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
-[[ -d /sys/firmware/efi/efivars ]] || { echo "Requires UEFI"; exit 1; }
+[[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
 [[ -b $DISK ]] || { echo "Disk not found: $DISK"; exit 1; }
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -38,13 +39,25 @@ done
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
 if [[ $INSTALL_MODE == "clean" ]]; then
-    parted -s "$DISK" mklabel gpt mkpart primary fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
-    BOOT_PART="${DISK}p1"
-    ROOT_PART="${DISK}p2"
-    mkfs.fat -F32 "$BOOT_PART"
+    if [[ $UEFI_MODE -eq 1 ]]; then
+        parted -s "$DISK" mklabel gpt mkpart primary fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
+        BOOT_PART="${DISK}p1"
+        ROOT_PART="${DISK}p2"
+        mkfs.fat -F32 "$BOOT_PART"
+    else
+        parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 512MiB set 1 boot on mkpart primary ext4 512MiB 100%
+        BOOT_PART="${DISK}p1"
+        ROOT_PART="${DISK}p2"
+        mkfs.ext4 "$BOOT_PART"
+    fi
 else
-    BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/{print $1}' | head -1)
-    [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "No valid EFI partition found"; exit 1; }
+    if [[ $UEFI_MODE -eq 1 ]]; then
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/{print $1}' | head -1)
+        [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "No valid EFI partition found"; exit 1; }
+    else
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/{print $1}' | head -1)
+        [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "ext4" ]] || { echo "No valid boot partition found"; exit 1; }
+    fi
     LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{last=$3}END{gsub("MiB", "", last); print last}')
     START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
     DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB", "", $3); print $3}')
@@ -60,8 +73,12 @@ fi
 mkfs.ext4 -F "$ROOT_PART"
 sync
 mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot/efi
-mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
+mkdir -p /mnt/boot
+if [[ $UEFI_MODE -eq 1 ]]; then
+    mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
+else
+    mount "$BOOT_PART" /mnt/boot || { echo "Failed mounting boot partition"; umount /mnt; exit 1; }
+fi
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
@@ -95,7 +112,11 @@ FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+if [[ $UEFI_MODE -eq 1 ]]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+else
+    grub-install --target=i386-pc "$DISK"
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
