@@ -24,9 +24,10 @@ BROWSER="librewolf"
 UEFI_MODE=0
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-DISK=$(lsblk -dno NAME | grep -E '^(nvme|sda|vda)' | head -1)
+# Hardcode NVMe detection
+DISK=$(lsblk -dno NAME | grep -E '^nvme' | head -1)
 DISK="/dev/$DISK"
-[[ -b $DISK ]] || { echo "Disk not found: $DISK"; exit 1; }
+[[ -b $DISK ]] || { echo "NVMe disk not found"; exit 1; }
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -40,67 +41,48 @@ done
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
 if [[ $INSTALL_MODE == "clean" ]]; then
-    if [[ $UEFI_MODE -eq 1 ]]; then
-        parted -s "$DISK" mklabel gpt mkpart primary fat32 1MiB 512MiB set 1 esp on mkpart primary ext4 512MiB 100%
-        BOOT_PART="${DISK}p1"
-        ROOT_PART="${DISK}p2"
-        mkfs.fat -F32 "$BOOT_PART"
-    else
-        parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 512MiB set 1 boot on mkpart primary ext4 512MiB 100%
-        BOOT_PART="${DISK}1"
-        ROOT_PART="${DISK}2"
-        mkfs.ext4 "$BOOT_PART"
-    fi
+    # Clean install - always create new ESP
+    parted -s "$DISK" mklabel gpt
+    parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
+    parted -s "$DISK" mkpart primary ext4 513MiB 100%
+    BOOT_PART="${DISK}p1"
+    ROOT_PART="${DISK}p2"
+    mkfs.fat -F32 "$BOOT_PART"
 else
+    # Dual install - create ESP if missing
     if [[ $UEFI_MODE -eq 1 ]]; then
-        # Enhanced EFI partition detection
-        BOOT_PART_NUM=$(LANG=C parted -s "$DISK" print | awk '/esp/ {print $1}' | head -1)
-        if [[ -n $BOOT_PART_NUM ]]; then
-            if [[ $DISK =~ nvme[0-9]n[0-9]$ ]] || [[ $DISK =~ mmcblk[0-9]+$ ]]; then
-                BOOT_PART="${DISK}p${BOOT_PART_NUM}"
-            else
-                BOOT_PART="${DISK}${BOOT_PART_NUM}"
-            fi
-            [[ $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "EFI partition $BOOT_PART is not vfat"; exit 1; }
-        else
-            echo "No EFI System Partition found. Create an ESP and rerun."
-            exit 1
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
+        if [[ -z "$BOOT_PART" ]]; then
+            echo "Creating new ESP partition"
+            parted -s "$DISK" mkpart primary fat32 1MiB 513MiB
+            parted -s "$DISK" set 1 esp on
+            BOOT_PART="${DISK}p1"
+            mkfs.fat -F32 "$BOOT_PART"
         fi
+        [[ $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "Invalid ESP filesystem"; exit 1; }
     else
-        BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/{print $1}' | head -1)
-        [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "ext4" ]] || { echo "No valid boot partition found"; exit 1; }
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
+        [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "ext4" ]] || { echo "No valid boot partition"; exit 1; }
     fi
+    # Find last partition
     LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{last=$3}END{gsub("MiB", "", last); print last}')
     START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
     DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB", "", $3); print $3}')
     AVAILABLE_SPACE=$(awk "BEGIN {print $DISK_SIZE - $START_POINT}")
-    if (( $(awk "BEGIN {print ($AVAILABLE_SPACE < 10240)}") )); then
-        echo "Need 10GB+ free space (only ${AVAILABLE_SPACE}MiB available)"
-        exit 1
-    fi
+    (( AVAILABLE_SPACE >= 10240 )) || { echo "Need 10GB+ free space"; exit 1; }
     parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
-    ROOT_PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)
-    if [[ $DISK =~ nvme[0-9]n[0-9]$ ]] || [[ $DISK =~ mmcblk[0-9]+$ ]]; then
-        ROOT_PART="${DISK}p${ROOT_PART_NUM}"
-    else
-        ROOT_PART="${DISK}${ROOT_PART_NUM}"
-    fi
+    ROOT_PART="${DISK}p$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)"
 fi
 mkfs.ext4 -F "$ROOT_PART"
 sync
 mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot
-if [[ $UEFI_MODE -eq 1 ]]; then
-    mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed mounting EFI"; umount /mnt; exit 1; }
-else
-    mount "$BOOT_PART" /mnt/boot || { echo "Failed mounting boot partition"; umount /mnt; exit 1; }
-fi
+mkdir -p /mnt/boot/efi
+mount "$BOOT_PART" /mnt/boot/efi || { echo "EFI mount failed"; umount /mnt; exit 1; }
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring
 pacman -Syy
-# Added os-prober to pacstrap
 pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober
 genfstab -U /mnt >> /mnt/etc/fstab
 arch-chroot /mnt /bin/bash <<EOF
@@ -129,12 +111,7 @@ FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
-if [[ $UEFI_MODE -eq 1 ]]; then
-    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-else
-    grub-install --target=i386-pc "$DISK"
-fi
-# Enable os-prober
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
@@ -159,12 +136,10 @@ echo "exec i3" >> ~/.xinitrc
 chmod +x ~/.xinitrc
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
-if ! grep -q "set \$mod" ~/.config/i3/config; then
-    sed -i '1i set $mod Mod4' ~/.config/i3/config
-fi
+sed -i '1i set $mod Mod4' ~/.config/i3/config
 sed -i '1a workspace_layout tabbed' ~/.config/i3/config
-sed -i 's/\$mod+h/\$mod+Shift+h/' ~/.config/i3/config
-sed -i 's/\$mod+l/\$mod+Shift+l/' ~/.config/i3/config
+sed -i 's/\$mod+h/\$mod+Shift+h/
+s/\$mod+l/\$mod+Shift+l/' ~/.config/i3/config
 sed -i '/bindsym .*focus/d' ~/.config/i3/config
 echo "bindsym \$mod+h focus left
 bindsym \$mod+j focus down
