@@ -162,18 +162,17 @@ echo 'Section "InputClass"
 EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 EOF
+mkdir -p /mnt/var/log
+cp /var/log/min-arch.log "/mnt/var/log/min-arch-install-$(date +%Y%m%d%H%M).log"
 sync
 if mountpoint -q /mnt; then
-  if ! command -v fuser &>/dev/null; then
-    pacman -Sy --noconfirm psmisc
-  fi
   for attempt in {1..3}; do
     fuser -km /mnt || true
     sleep 2
     if umount -R /mnt; then
       break
     elif [[ $attempt -eq 3 ]]; then
-      echo "ERROR: Failed to unmount /mnt after 3 attempts"
+      echo "ERROR: Failed to unmount after 3 attempts" | tee -a /var/log/min-arch.log
       exit 1
     fi
   done
