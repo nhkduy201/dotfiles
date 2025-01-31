@@ -117,8 +117,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin && makepkg -si --noconfirm
-paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus
-paru -S --noconfirm ibus-bamboo
+paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus ibus-bamboo gvim
 if [[ "$BROWSER" == "edge" ]]; then
     paru -S --noconfirm microsoft-edge-stable-bin
 else
@@ -142,10 +141,10 @@ sed -i '1a workspace_layout tabbed' ~/.config/i3/config
 sed -i 's/\$mod+h/\$mod+Shift+h/
 s/\$mod+l/\$mod+Shift+l/' ~/.config/i3/config
 sed -i '/bindsym .*focus/d' ~/.config/i3/config
-echo "bindsym \$mod+h focus left
+echo 'bindsym \$mod+h focus left
 bindsym \$mod+j focus down
 bindsym \$mod+k focus up
-bindsym \$mod+l focus right" >> ~/.config/i3/config
+bindsym \$mod+l focus right' >> ~/.config/i3/config
 echo "startx" >> ~/.bashrc
 rm -rf /tmp/paru-bin
 USERCMD
