@@ -24,12 +24,14 @@ BROWSER="librewolf"
 UEFI_MODE=0
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-
-# Ventoy-safe disk detection
-DISK=$(lsblk -dno NAME,MOUNTPOINT | awk '!/\/run\/media\/|Ventoy/ && /^(nvme|sda|vda)/ {print $1; exit}')
+DISK=$(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}' | grep -E '^nvme' | head -1)
 DISK="/dev/$DISK"
-[[ -b $DISK ]] || { echo "No valid target disk found (Ventoy excluded)"; exit 1; }
-
+[[ -b "$DISK" ]] || {
+  echo "No suitable NVMe disk found (non-removable media)"
+  echo "Available disks:"
+  lsblk -dno NAME,TYPE,RM,SIZE,MODEL
+  exit 1
+}
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -44,9 +46,11 @@ done
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
 
 if [[ $INSTALL_MODE == "clean" ]]; then
-    echo "WARNING: This will wipe entire disk: $DISK"
-    read -p "Confirm (y/n)? " -n 1 -r
-    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+    echo "WARNING: Selected disk for installation:"
+    lsblk -o NAME,SIZE,MODEL,TRAN,ROTA "$DISK"
+    echo -n "THIS WILL ERASE ALL DATA ON $DISK! Confirm (y/n)? "
+    read -r answer
+    [[ "$answer" =~ ^[Yy]$ ]] || exit 1
     echo
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
