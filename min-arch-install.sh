@@ -135,16 +135,16 @@ echo "exec i3" >> ~/.xinitrc
 chmod +x ~/.xinitrc
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
-sed -i 's/Mod1/\$mod/g' ~/.config/i3/config
-sed -i '1i set \$mod Mod4' ~/.config/i3/config
+sed -i 's/Mod1/\\\$mod/g' ~/.config/i3/config
+sed -i '1i set \\\$mod Mod4' ~/.config/i3/config
 sed -i '1a workspace_layout tabbed' ~/.config/i3/config
-sed -i 's/\$mod+h/\$mod+Shift+h/
-s/\$mod+l/\$mod+Shift+l/' ~/.config/i3/config
+sed -i 's/\\\$mod+h/\\\$mod+Shift+h/
+s/\\\$mod+l/\\\$mod+Shift+l/' ~/.config/i3/config
 sed -i '/bindsym .*focus/d' ~/.config/i3/config
-echo 'bindsym \$mod+h focus left
-bindsym \$mod+j focus down
-bindsym \$mod+k focus up
-bindsym \$mod+l focus right' >> ~/.config/i3/config
+echo 'bindsym \\\$mod+h focus left
+bindsym \\\$mod+j focus down
+bindsym \\\$mod+k focus up
+bindsym \\\$mod+l focus right' >> ~/.config/i3/config
 echo "startx" >> ~/.bashrc
 rm -rf /tmp/paru-bin
 USERCMD
