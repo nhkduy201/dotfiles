@@ -24,10 +24,12 @@ BROWSER="librewolf"
 UEFI_MODE=0
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-# Hardcode NVMe detection
-DISK=$(lsblk -dno NAME | grep -E '^nvme' | head -1)
+
+# Ventoy-safe disk detection
+DISK=$(lsblk -dno NAME,MOUNTPOINT | awk '!/\/run\/media\/|Ventoy/ && /^(nvme|sda|vda)/ {print $1; exit}')
 DISK="/dev/$DISK"
-[[ -b $DISK ]] || { echo "NVMe disk not found"; exit 1; }
+[[ -b $DISK ]] || { echo "No valid target disk found (Ventoy excluded)"; exit 1; }
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -40,8 +42,12 @@ done
 [[ -n $PASSWORD ]] || { echo "Password required"; exit 1; }
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
+
 if [[ $INSTALL_MODE == "clean" ]]; then
-    # Clean install - always create new ESP
+    echo "WARNING: This will wipe entire disk: $DISK"
+    read -p "Confirm (y/n)? " -n 1 -r
+    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+    echo
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
@@ -49,11 +55,11 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     ROOT_PART="${DISK}p2"
     mkfs.fat -F32 "$BOOT_PART"
 else
-    # Dual install - create ESP if missing
     if [[ $UEFI_MODE -eq 1 ]]; then
+        BOOT_PART=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
+        [[ -z "$BOOT_PART" ]] || { echo "Ventoy partition detected - aborting"; exit 1; }
         BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
-            echo "Creating new ESP partition"
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB
             parted -s "$DISK" set 1 esp on
             BOOT_PART="${DISK}p1"
@@ -64,7 +70,6 @@ else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         [[ -n $BOOT_PART && -b $BOOT_PART && $(blkid -s TYPE -o value "$BOOT_PART") == "ext4" ]] || { echo "No valid boot partition"; exit 1; }
     fi
-    # Find last partition
     LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{last=$3}END{gsub("MiB", "", last); print last}')
     START_POINT=$(awk "BEGIN {print int($LAST_PART_END + 1)}")
     DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB", "", $3); print $3}')
@@ -73,11 +78,13 @@ else
     parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
     ROOT_PART="${DISK}p$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)"
 fi
+
 mkfs.ext4 -F "$ROOT_PART"
 sync
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi || { echo "EFI mount failed"; umount /mnt; exit 1; }
+
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
@@ -85,10 +92,11 @@ pacman -Sy --noconfirm archlinux-keyring
 pacman -Syy
 pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober
 genfstab -U /mnt >> /mnt/etc/fstab
+
 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
-sed -i 's/#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+sed -i 's/^\\s*#\\s*en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 echo "$HOSTNAME" > /etc/hostname
@@ -112,7 +120,9 @@ DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
+if [[ "$INSTALL_MODE" == "dual" ]]; then
+    echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 sudo -u $USERNAME bash <<USERCMD
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
@@ -161,19 +171,16 @@ echo 'Section "InputClass"
 EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 EOF
-mkdir -p /mnt/var/log
-cp /var/log/min-arch.log "/mnt/var/log/min-arch-install-$(date +%Y%m%d%H%M).log"
+
 sync
 if mountpoint -q /mnt; then
   for attempt in {1..3}; do
     fuser -km /mnt || true
     sleep 2
-    if umount -R /mnt; then
-      break
-    elif [[ $attempt -eq 3 ]]; then
-      echo "ERROR: Failed to unmount after 3 attempts" | tee -a /var/log/min-arch.log
-      exit 1
-    fi
+    umount -R /mnt && break || {
+      [[ $attempt -eq 3 ]] && { echo "Failed to unmount"; exit 1; }
+      sleep 5
+    }
   done
 fi
 reboot
