@@ -100,7 +100,7 @@ pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr inte
 genfstab -U /mnt >> /mnt/etc/fstab
 
 SWAP_SIZE=$(($(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 2)) # Half of RAM size
-arch-chroot /mnt /bin/bash <<EOF
+arch-chroot /mnt /bin/bash <<'CHROOT_EOF'
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -143,56 +143,46 @@ mkdir -p /etc/sudoers.d
 echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
 chmod 440 /etc/sudoers.d/l5p-kbl
 mkdir -p /etc/X11/xorg.conf.d
-echo 'Section "InputClass"
+cat > /etc/X11/xorg.conf.d/30-touchpad.conf <<'XORG_EOF'
+Section "InputClass"
     Identifier "libinput touchpad catchall"
     MatchIsTouchpad "on"
     Driver "libinput"
     Option "Tapping" "on"
     Option "NaturalScrolling" "true"
-EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
+EndSection
+XORG_EOF
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
-sudo -u $USERNAME bash <<USERCMD
+sudo -u $USERNAME bash <<'USERCMD'
 cd ~
 git clone https://github.com/imShara/l5p-kbl
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-echo "export GTK_IM_MODULE=ibus
+cat > ~/.xinitrc <<'XINIT_EOF'
+export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
 export QT_IM_MODULE=ibus
 ibus-daemon -drx &
-sudo python \\\$HOME/l5p-kbl/l5p_kbl.py static a020f0
-exec i3" > ~/.xinitrc
+sudo python $HOME/l5p-kbl/l5p_kbl.py static a020f0
+exec i3
+XINIT_EOF
 chmod +x ~/.xinitrc
-mkdir -p ~/.config/i3
-cp /etc/i3/config ~/.config/i3/config
-sed -i 's/Mod1/\\\$mod/g' ~/.config/i3/config
-sed -i '1i set \\\$mod Mod4' ~/.config/i3/config
-sed -i '1a workspace_layout tabbed' ~/.config/i3/config
-sed -i 's/\\\$mod+h/\\\$mod+Shift+h/
-s/\\\$mod+l/\\\$mod+Shift+l/' ~/.config/i3/config
-sed -i '/bindsym .*focus/d' ~/.config/i3/config
-echo 'bindsym \\\$mod+h focus left
-bindsym \\\$mod+j focus down
-bindsym \\\$mod+k focus up
-bindsym \\\$mod+l focus right' >> ~/.config/i3/config
-echo "export HISTCONTROL=ignoreboth
-export EDITOR=vim
-startx" >> ~/.bashrc
-echo "[user]
-	name = nhkduy201
+cat > ~/.gitconfig <<'GITCONFIG_EOF'
+[user]
+    name = nhkduy201
 [color]
-	pager = no
+    pager = no
 [core]
-	pager = vim -R -
-[difftool \\\"vim\\\"]
-	cmd = vim -d \\\"\\\$LOCAL\\\" \\\"\\\$REMOTE\\\"
+    pager = vim -R -
+[difftool "vim"]
+    cmd = vim -d "$LOCAL" "$REMOTE"
 [difftool]
-	prompt = false
+    prompt = false
 [diff]
-	tool = vim
-" > ~/.gitconfig
+    tool = vim
+GITCONFIG_EOF
 USERCMD
 rm -rf /tmp/paru-bin
-EOF
+CHROOT_EOF
 
 sync
 if mountpoint -q /mnt; then
