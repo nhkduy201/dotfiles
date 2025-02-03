@@ -95,7 +95,7 @@ sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring netcat git
-pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober alsa-utils pulseaudio pulseaudio-alsa pavucontrol xorg-server xorg-xinit i3-wm i3status i3blocks dmenu picom feh ibus gvim xclip
+pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber alsa-utils xorg-server xorg-xinit i3-wm i3status i3blocks dmenu picom feh ibus gvim xclip mpv
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -130,8 +130,7 @@ mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 [[ "$INSTALL_MODE" == "dual" ]] && echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
-echo "load-module module-switch-on-connect" >> /etc/pulse/default.pa
-systemctl --user enable pulseaudio
+systemctl --user --now enable pipewire pipewire-pulse wireplumber
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin && makepkg -si --noconfirm
 if [[ "$BROWSER" == "edge" ]]; then
