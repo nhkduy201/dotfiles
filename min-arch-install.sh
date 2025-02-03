@@ -1,37 +1,35 @@
 #!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
-pacman -Sy --noconfirm curl netcat
+
 error_log() {
     local error_msg="$1"
-    local log_content="
+    echo "
 Error: $error_msg
 Time: $(date)
 Disk info:
 $(fdisk -l $DISK)
 $(lsblk -f $DISK)
 Last commands:
-$(tail -n 20 /var/log/min-arch.log)"
-    echo "$log_content" | nc termbin.com 9999
+$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999
 }
+
 exec 1> >(tee -a /var/log/min-arch.log)
 exec 2> >(tee -a /var/log/min-arch.log >&2)
+
 HOSTNAME="archlinux"
 USERNAME="kayd"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean"
-BROWSER="librewolf"
+BROWSER="edge"
 UEFI_MODE=0
+
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
 DISK=$(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}' | grep -E '^nvme' | head -1)
 DISK="/dev/$DISK"
-[[ -b "$DISK" ]] || {
-  echo "No suitable NVMe disk found (non-removable media)"
-  echo "Available disks:"
-  lsblk -dno NAME,TYPE,RM,SIZE,MODEL
-  exit 1
-}
+[[ -b "$DISK" ]] || { echo "No suitable NVMe disk found"; lsblk -dno NAME,TYPE,RM,SIZE,MODEL; exit 1; }
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -41,6 +39,7 @@ while [[ $# -gt 0 ]]; do
         *) echo "Usage: $0 [-d disk] [-m clean|dual] [-b edge|librewolf] -p password"; exit 1 ;;
     esac
 done
+
 [[ -n $PASSWORD ]] || { echo "Password required"; exit 1; }
 [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Invalid mode: $INSTALL_MODE"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Invalid browser: $BROWSER"; exit 1; }
@@ -51,13 +50,11 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     echo -n "THIS WILL ERASE ALL DATA ON $DISK! Confirm (y/n)? "
     read -r answer
     [[ "$answer" =~ ^[Yy]$ ]] || exit 1
-    echo
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
     BOOT_PART="${DISK}p1"
     ROOT_PART="${DISK}p2"
-    mkfs.fat -F32 "$BOOT_PART"
 else
     if [[ $UEFI_MODE -eq 1 ]]; then
         BOOT_PART=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
@@ -67,7 +64,6 @@ else
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB
             parted -s "$DISK" set 1 esp on
             BOOT_PART="${DISK}p1"
-            mkfs.fat -F32 "$BOOT_PART"
         fi
         [[ $(blkid -s TYPE -o value "$BOOT_PART") == "vfat" ]] || { echo "Invalid ESP filesystem"; exit 1; }
     else
@@ -83,6 +79,12 @@ else
     ROOT_PART="${DISK}p$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)"
 fi
 
+if [[ $UEFI_MODE -eq 1 ]]; then
+    mkfs.fat -F32 "$BOOT_PART"
+else
+    mkfs.ext4 "$BOOT_PART"
+fi
+
 mkfs.ext4 -F "$ROOT_PART"
 sync
 mount "$ROOT_PART" /mnt
@@ -92,26 +94,27 @@ mount "$BOOT_PART" /mnt/boot/efi || { echo "EFI mount failed"; umount /mnt; exit
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
-pacman -Sy --noconfirm archlinux-keyring
-pacman -Syy
-pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober
+pacman -Sy --noconfirm archlinux-keyring netcat git
+pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober alsa-utils pulseaudio pulseaudio-alsa pavucontrol xorg-server xorg-xinit i3-wm i3status i3blocks dmenu alacritty picom feh ibus ibus-bamboo gvim
+
 genfstab -U /mnt >> /mnt/etc/fstab
 
+SWAP_SIZE=$(($(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 2)) # Half of RAM size
 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
-sed -i 's/^\\s*#\\s*en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 echo "$HOSTNAME" > /etc/hostname
 echo "127.0.0.1 localhost
-::1       localhost
+::1	localhost
 127.0.1.1 $HOSTNAME.localdomain $HOSTNAME" > /etc/hosts
 echo "root:$PASSWORD" | chpasswd
 useradd -m -G wheel "$USERNAME"
 echo "$USERNAME:$PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-fallocate -l 4G /swapfile
+fallocate -l ${SWAP_SIZE}M /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
@@ -125,14 +128,12 @@ DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-if [[ "$INSTALL_MODE" == "dual" ]]; then
-    echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
-fi
+[[ "$INSTALL_MODE" == "dual" ]] && echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
-sudo -u $USERNAME bash <<USERCMD
+echo "load-module module-switch-on-connect" >> /etc/pulse/default.pa
+systemctl --user enable pulseaudio
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin && makepkg -si --noconfirm
-paru -S --noconfirm i3-wm i3status i3blocks dmenu xorg-server xorg-xinit xorg-xrandr alacritty picom feh ibus ibus-bamboo gvim
 if [[ "$BROWSER" == "edge" ]]; then
     paru -S --noconfirm microsoft-edge-stable-bin
 else
@@ -141,28 +142,6 @@ fi
 cd ~
 git clone https://github.com/imShara/l5p-kbl
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-echo "export GTK_IM_MODULE=ibus
-export XMODIFIERS=@im=ibus
-export QT_IM_MODULE=ibus
-ibus-daemon -drx &" >> ~/.xinitrc
-echo "sudo python \$HOME/l5p-kbl/l5p_kbl.py static a020f0" >> ~/.xinitrc
-echo "exec i3" >> ~/.xinitrc
-chmod +x ~/.xinitrc
-mkdir -p ~/.config/i3
-cp /etc/i3/config ~/.config/i3/config
-sed -i 's/Mod1/\\\$mod/g' ~/.config/i3/config
-sed -i '1i set \\\$mod Mod4' ~/.config/i3/config
-sed -i '1a workspace_layout tabbed' ~/.config/i3/config
-sed -i 's/\\\$mod+h/\\\$mod+Shift+h/
-s/\\\$mod+l/\\\$mod+Shift+l/' ~/.config/i3/config
-sed -i '/bindsym .*focus/d' ~/.config/i3/config
-echo 'bindsym \\\$mod+h focus left
-bindsym \\\$mod+j focus down
-bindsym \\\$mod+k focus up
-bindsym \\\$mod+l focus right' >> ~/.config/i3/config
-echo "startx" >> ~/.bashrc
-rm -rf /tmp/paru-bin
-USERCMD
 mkdir -p /etc/sudoers.d
 echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
 chmod 440 /etc/sudoers.d/l5p-kbl
@@ -175,6 +154,32 @@ echo 'Section "InputClass"
     Option "NaturalScrolling" "true"
 EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
+sudo -u $USERNAME bash <<USERCMD
+echo "export GTK_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+export QT_IM_MODULE=ibus
+ibus-daemon -drx &
+sudo python \$HOME/l5p-kbl/l5p_kbl.py static a020f0
+exec i3" > ~/.xinitrc
+chmod +x ~/.xinitrc
+mkdir -p ~/.config/i3
+cp /etc/i3/config ~/.config/i3/config
+sed -i 's/Mod1/\\\$mod/g' ~/.config/i3/config
+sed -i '1i set \\\$mod Mod4' ~/.config/i3/config
+sed -i '1a workspace_layout tabbed' ~/.config/i3/config
+sed -i 's/\\\$mod+h/\\\$mod+Shift+h/
+s/\\\$mod+l/\\\$mod+Shift+l/' ~/.config/i3/config
+sed -i '/bindsym .*focus/d' ~/.config/i3/config
+echo 'bindsym \\\$mod+h focus left
+bindsym \\\$mod+j focus down
+bindsym \\\$mod+k focus up
+bindsym \\\$mod+l focus right
+bindsym XF86AudioRaiseVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ +5%
+bindsym XF86AudioLowerVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ -5%
+bindsym XF86AudioMute exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ toggle' >> ~/.config/i3/config
+echo "startx" >> ~/.bashrc
+USERCMD
+rm -rf /tmp/paru-bin
 EOF
 
 sync
