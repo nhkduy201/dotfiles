@@ -95,7 +95,7 @@ sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring netcat git
-pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober alsa-utils pulseaudio pulseaudio-alsa pavucontrol xorg-server xorg-xinit i3-wm i3status i3blocks dmenu alacritty picom feh ibus ibus-bamboo gvim
+pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober alsa-utils pulseaudio pulseaudio-alsa pavucontrol xorg-server xorg-xinit i3-wm i3status i3blocks dmenu picom feh ibus gvim xclip
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -135,13 +135,10 @@ systemctl --user enable pulseaudio
 cd /tmp && git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin && makepkg -si --noconfirm
 if [[ "$BROWSER" == "edge" ]]; then
-    paru -S --noconfirm microsoft-edge-stable-bin
+    paru -S --noconfirm ibus-bamboo microsoft-edge-stable-bin
 else
-    paru -S --noconfirm librewolf-bin
+    paru -S --noconfirm ibus-bamboo librewolf-bin
 fi
-cd ~
-git clone https://github.com/imShara/l5p-kbl
-sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 mkdir -p /etc/sudoers.d
 echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: /usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
 chmod 440 /etc/sudoers.d/l5p-kbl
@@ -155,11 +152,14 @@ echo 'Section "InputClass"
 EndSection' > /etc/X11/xorg.conf.d/30-touchpad.conf
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 sudo -u $USERNAME bash <<USERCMD
+cd ~
+git clone https://github.com/imShara/l5p-kbl
+sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 echo "export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
 export QT_IM_MODULE=ibus
 ibus-daemon -drx &
-sudo python \$HOME/l5p-kbl/l5p_kbl.py static a020f0
+sudo python \\\$HOME/l5p-kbl/l5p_kbl.py static a020f0
 exec i3" > ~/.xinitrc
 chmod +x ~/.xinitrc
 mkdir -p ~/.config/i3
@@ -174,7 +174,22 @@ echo 'bindsym \\\$mod+h focus left
 bindsym \\\$mod+j focus down
 bindsym \\\$mod+k focus up
 bindsym \\\$mod+l focus right' >> ~/.config/i3/config
-echo "startx" >> ~/.bashrc
+echo "export HISTCONTROL=ignoreboth
+export EDITOR=vim
+startx" >> ~/.bashrc
+echo "[user]
+	name = nhkduy201
+[color]
+	pager = no
+[core]
+	pager = vim -R -
+[difftool \\\"vim\\\"]
+	cmd = vim -d \\\"\\\$LOCAL\\\" \\\"\\\$REMOTE\\\"
+[difftool]
+	prompt = false
+[diff]
+	tool = vim
+" > ~/.gitconfig
 USERCMD
 rm -rf /tmp/paru-bin
 EOF
