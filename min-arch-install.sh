@@ -173,10 +173,7 @@ sed -i '/bindsym .*focus/d' ~/.config/i3/config
 echo 'bindsym \\\$mod+h focus left
 bindsym \\\$mod+j focus down
 bindsym \\\$mod+k focus up
-bindsym \\\$mod+l focus right
-bindsym XF86AudioRaiseVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ +5%
-bindsym XF86AudioLowerVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ -5%
-bindsym XF86AudioMute exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ toggle' >> ~/.config/i3/config
+bindsym \\\$mod+l focus right' >> ~/.config/i3/config
 echo "startx" >> ~/.bashrc
 USERCMD
 rm -rf /tmp/paru-bin
