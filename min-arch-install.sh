@@ -118,7 +118,8 @@ swapon /swapfile
 echo "/swapfile none swap defaults 0 0" >> /etc/fstab
 systemctl enable systemd-resolved NetworkManager
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-echo "DNS=8.8.8.8 8.8.4.4
+echo "[Resolve]
+DNS=8.8.8.8 8.8.4.4
 FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
