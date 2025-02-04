@@ -157,7 +157,7 @@ cat > ~/.gitconfig <<'GITCONFIG_EOF'
 [color]
     pager = no
 [core]
-    pager = vim -R -
+    pager = vim --not-a-term -R -
 [difftool "vim"]
     cmd = vim -d "$LOCAL" "$REMOTE"
 [difftool]
