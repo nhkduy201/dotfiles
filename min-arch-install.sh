@@ -1,16 +1,13 @@
 #!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
-error_log() {
-local error_msg="$1"
-echo "Error: $error_msg
+error_log() { local error_msg="$1"; echo "Error: $error_msg
 Time: $(date)
 Disk info:
 $(fdisk -l "$DISK")
 $(lsblk -f "$DISK")
 Last commands:
-$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999
-}
+$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999; }
 exec 1> >(tee -a /var/log/min-arch.log)
 exec 2> >(tee -a /var/log/min-arch.log >&2)
 HOSTNAME="archlinux"
@@ -187,6 +184,7 @@ bindsym \$mod+l focus right
 I3_EXTRA_EOF
 sed -i 's/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 grep -q 'bindsym \$mod\+Shift\+s' ~/.config/i3/config || echo 'bindsym $mod+Shift+s exec --no-startup-id "scrot -s - | xclip -selection clipboard -t image/png"' >> ~/.config/i3/config
+grep -q 'bindsym \$mod\+q kill' ~/.config/i3/config || echo 'bindsym $mod+q kill' >> ~/.config/i3/config
 cat >> ~/.bashrc <<'BASHRC_EXTRA_EOF'
 export HISTCONTROL=ignoreboth
 export EDITOR=vim
@@ -200,10 +198,7 @@ if mountpoint -q /mnt; then
 for attempt in {1..3}; do
 fuser -km /mnt || true
 sleep 2
-umount -R /mnt && break || {
-[[ $attempt -eq 3 ]] && { echo "Failed to unmount"; exit 1; }
-sleep 5
-}
+umount -R /mnt && break || { [[ $attempt -eq 3 ]] && { echo "Failed to unmount"; exit 1; } sleep 5; }
 done
 fi
 reboot
