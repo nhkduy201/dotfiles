@@ -81,7 +81,7 @@ sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring netcat git
-pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber alsa-utils xorg-server xorg-xinit i3-wm i3status i3blocks dmenu picom feh ibus gvim xclip mpv st scrot
+pacstrap /mnt base linux linux-firmware networkmanager sudo grub efibootmgr intel-ucode amd-ucode git base-devel fuse2 os-prober pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber alsa-utils xorg-server xorg-xinit i3-wm i3status i3blocks dmenu picom feh ibus gvim xclip mpv st scrot python-pyusb
 genfstab -U /mnt >> /mnt/etc/fstab
 SWAP_SIZE=$(($(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 2))
 arch-chroot /mnt /bin/bash <<'CHROOT_EOF'
