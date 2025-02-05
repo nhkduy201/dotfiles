@@ -171,17 +171,11 @@ bind -x '"\C-r": _custom_reverse_search_dmenu'
 BASHRC_EOF
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
-sed -i 's/Mod1/\\\$mod/g' ~/.config/i3/config
-sed -i '1i set \\\$mod Mod4' ~/.config/i3/config
+sed -i 's/Mod1/\$mod/g' ~/.config/i3/config
+sed -i '1i set \$mod Mod4' ~/.config/i3/config
 sed -i '1a workspace_layout tabbed' ~/.config/i3/config
-sed -i 's/\\\$mod+h/\\\$mod+Shift+h/; s/\\\$mod+l/\\\$mod+Shift+l/' ~/.config/i3/config
-sed -i '/bindsym .*focus/d' ~/.config/i3/config
-cat >> ~/.config/i3/config <<'I3_EXTRA_EOF'
-bindsym \$mod+h focus left
-bindsym \$mod+j focus down
-bindsym \$mod+k focus up
-bindsym \$mod+l focus right
-I3_EXTRA_EOF
+sed -i 's/\$mod+h/\$mod+Mod1+h/; s/\$mod+v/\$mod+Mod1+v/' ~/.config/i3/config
+sed -i 's/set \$up l/set \$up k/; s/set \$down k/set \$down j/; s/set \$left j/set \$left h/; s/set \$right semicolon/set \$right l/' ~/.config/i3/config
 sed -i 's/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 grep -q 'bindsym \$mod\+Shift\+s' ~/.config/i3/config || echo 'bindsym $mod+Shift+s exec --no-startup-id "scrot -s - | xclip -selection clipboard -t image/png"' >> ~/.config/i3/config
 grep -q 'bindsym \$mod\+q kill' ~/.config/i3/config || echo 'bindsym $mod+q kill' >> ~/.config/i3/config
