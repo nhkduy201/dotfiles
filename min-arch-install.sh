@@ -149,9 +149,9 @@ s/workspace_layout default/workspace_layout tabbed/
 s/\\\$mod+h/\\\$mod+Mod1+h/;s/\\\$mod+v/\\\$mod+Mod1+v/
 s/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 sed -i 's/set \\\$up l/set \\\$up k/; s/set \\\$down k/set \\\$down j/; s/set \\\$left j/set \\\$left h/; s/set \\\$right semicolon/set \\\$right l/' ~/.config/i3/config
-echo 'bindsym \$mod+Shift+l exec --no-startup-id i3lock
-bindsym \$mod+Shift+s exec --no-startup-id "scrot -s - | xclip -sel clip -t image/png"
-bindsym \$mod+q kill' >> ~/.config/i3/config
+echo 'bindsym \\\$mod+Shift+l exec --no-startup-id i3lock
+bindsym \\\$mod+Shift+s exec --no-startup-id "scrot -s - | xclip -sel clip -t image/png"
+bindsym \\\$mod+q kill' >> ~/.config/i3/config
 cat > ~/.xinitrc <<'XINIT_EOF'
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
