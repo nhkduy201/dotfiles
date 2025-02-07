@@ -138,7 +138,13 @@ sudo -u $USERNAME bash <<USER_EOF
 cd ~
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin && makepkg -si --noconfirm
-[[ "$BROWSER" == "edge" ]] && paru -S --noconfirm ibus-bamboo microsoft-edge-stable-bin st-luke-git || paru -S --noconfirm ibus-bamboo librewolf-bin st-luke-git
+[[ "$BROWSER" == "edge" ]] && paru -S --noconfirm ibus-bamboo microsoft-edge-stable-bin || paru -S --noconfirm ibus-bamboo librewolf-bin
+paru -G st
+cd st
+sed -E -i 's#^STCFLAGS\\s*=#STCFLAGS = -O3 -march=native#' config.mk
+sed -i 's/static Key key\[\]/static Key key[] = {\n\t{ ControlMask|ShiftMask, XK_c, clipcopy, {.i = 0} },\n\t{ ControlMask|ShiftMask, XK_v, clippaste, {.i = 0} },/g' config.def.h
+makepkg -si --noconfirm --skipinteg
+cd ..
 git clone https://github.com/imShara/l5p-kbl
 sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 mkdir -p ~/.config/i3
