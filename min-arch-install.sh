@@ -85,7 +85,7 @@ mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman -Sy --noconfirm archlinux-keyring
-base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot python-pyusb)
+base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb)
 ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
 [[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
 pacstrap /mnt "${base_pkgs[@]}"
@@ -149,7 +149,7 @@ s/workspace_layout default/workspace_layout tabbed/
 s/\\\$mod+h/\\\$mod+Mod1+h/;s/\\\$mod+v/\\\$mod+Mod1+v/
 s/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 sed -i 's/set \\\$up l/set \\\$up k/; s/set \\\$down k/set \\\$down j/; s/set \\\$left j/set \\\$left h/; s/set \\\$right semicolon/set \\\$right l/' ~/.config/i3/config
-echo 'bindsym Mod1+Shift+l exec --no-startup-id i3lock
+echo 'bindsym Mod1+Shift+l exec --no-startup-id slock
 bindsym \\\$mod+Shift+s exec --no-startup-id "scrot -s - | xclip -sel clip -t image/png"
 bindsym \\\$mod+q kill' >> ~/.config/i3/config
 cat > ~/.xinitrc <<'XINIT_EOF'
