@@ -41,8 +41,8 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
-    BOOT_PART="${DISK}1"
-    ROOT_PART="${DISK}2"
+    BOOT_PART="${DISK}p1"
+    ROOT_PART="${DISK}p2"
 else
     FORMAT_BOOT=0
     if ((UEFI_MODE)); then
@@ -51,23 +51,24 @@ else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-            BOOT_PART="${DISK}1"
+            BOOT_PART="${DISK}p1"
             FORMAT_BOOT=1
         fi
     else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
-            BOOT_PART="${DISK}1"
+            BOOT_PART="${DISK}p1"
             FORMAT_BOOT=1
         fi
     fi
-    LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ /{l=$3} END {gsub("MiB","",l); print l}')
-    DISK_SIZE=$(parted -s "$DISK" unit MiB print | awk '/^Disk/{gsub("MiB","",$3); print $3}')
-    ((DISK_SIZE - LAST_PART_END >= 10240)) || { echo "Need 10GB+"; exit 1; }
+    FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {size=$3; gsub("MB","",$3); if($3 > max) max=$3} END {print max}')
+    [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"; exit 1; }
+    LAST_PART_END=$(parted -s "$DISK" unit MB print | awk '/^ [0-9]+ / {end=$3} END {gsub("MB","",end); print end}')
     START_POINT=$((LAST_PART_END + 1))
-    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
-    ROOT_PART="${DISK}$(parted -s "$DISK" print | awk '/^ [0-9]+ / {print $1}' | tail -1)"
+    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
+    PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
+    ROOT_PART="${DISK}p${PART_NUM}"
 fi
 if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
     if ((UEFI_MODE)); then
