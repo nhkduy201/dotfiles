@@ -150,8 +150,8 @@ sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
 mkdir -p ~/.config/i3
 cp /etc/i3/config ~/.config/i3/config
 sed -i '1i set \\\$mod Mod4
+1i workspace_layout tabbed
 s/Mod1/\\\$mod/g
-s/workspace_layout default/workspace_layout tabbed/
 s/\\\$mod+h/\\\$mod+Mod1+h/;s/\\\$mod+v/\\\$mod+Mod1+v/
 s/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 sed -i 's/set \\\$up l/set \\\$up k/; s/set \\\$down k/set \\\$down j/; s/set \\\$left j/set \\\$left h/; s/set \\\$right semicolon/set \\\$right l/' ~/.config/i3/config
