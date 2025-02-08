@@ -1,16 +1,13 @@
 #!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
-error_log() { 
-    local error_msg="$1"
-    echo "Error: $error_msg
+error_log() { local error_msg="$1"; echo "Error: $error_msg
 Time: $(date)
 Disk info:
 $(fdisk -l "$DISK")
 $(lsblk -f "$DISK")
 Last commands:
-$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999
-}
+$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999; }
 exec 1> >(tee -a /var/log/min-arch.log)
 exec 2> >(tee -a /var/log/min-arch.log >&2)
 HOSTNAME="archlinux"
@@ -44,8 +41,8 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
-    BOOT_PART="${DISK}p1"
-    ROOT_PART="${DISK}p2"
+    BOOT_PART="${DISK}1"
+    ROOT_PART="${DISK}2"
 else
     FORMAT_BOOT=0
     if ((UEFI_MODE)); then
@@ -54,14 +51,14 @@ else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-            BOOT_PART="${DISK}p1"
+            BOOT_PART="${DISK}1"
             FORMAT_BOOT=1
         fi
     else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
-            BOOT_PART="${DISK}p1"
+            BOOT_PART="${DISK}1"
             FORMAT_BOOT=1
         fi
     fi
