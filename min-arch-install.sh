@@ -175,11 +175,11 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
     tool = vim
 GITCFG_EOF
 cat >> ~/.bashrc <<'BASHRC_EOF'
-_custom_reverse_search_dmenu() {
-    local r=\$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "\$READLINE_LINE" | tac | awk '!a[\$0]++' | dmenu -l 10 -p "History> ")
-    [[ -n "\$r" ]] && READLINE_LINE="\$r" && READLINE_POINT=\${#READLINE_LINE}
+reverse_search_dmenu() {
+    local r=$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "$READLINE_LINE" | tac | awk '!a[$0]++' | dmenu -l 10 -p "History> ")
+    [[ -n "$r" ]] && READLINE_LINE="$r" && READLINE_POINT=${#READLINE_LINE}
 }
-bind -x '"\C-r": _custom_reverse_search_dmenu'
+bind -x '"\C-r": reverse_search_dmenu'
 export HISTCONTROL=ignoreboth
 export EDITOR=vim
 startx
