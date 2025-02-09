@@ -1,13 +1,7 @@
 #!/bin/bash -x
 set -eo pipefail
 trap 'error_log "Error on line $LINENO"' ERR
-error_log() { local error_msg="$1"; echo "Error: $error_msg
-Time: $(date)
-Disk info:
-$(fdisk -l "$DISK")
-$(lsblk -f "$DISK")
-Last commands:
-$(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999; }
+error_log() { local error_msg="$1"; echo "Error: $error_msg Time: $(date) Disk info: $(fdisk -l "$DISK") $(lsblk -f "$DISK") Last commands: $(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999; }
 exec 1> >(tee -a /var/log/min-arch.log)
 exec 2> >(tee -a /var/log/min-arch.log >&2)
 HOSTNAME="archlinux"
@@ -83,7 +77,7 @@ mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman -Sy --noconfirm archlinux-keyring
-base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb)
+base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl)
 ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
 [[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
 pacstrap /mnt "${base_pkgs[@]}"
@@ -99,7 +93,7 @@ echo "127.0.0.1 localhost
 ::1 localhost
 127.0.1.1 $HOSTNAME.localdomain $HOSTNAME" > /etc/hosts
 echo "root:$PASSWORD" | chpasswd
-useradd -m -G wheel "$USERNAME"
+useradd -m -G wheel,video "$USERNAME"
 echo "$USERNAME:$PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 SWAP_SIZE=\$(((\$(grep MemTotal /proc/meminfo | awk '{print \$2}') / 1024 / 2)))
@@ -155,7 +149,9 @@ s/exec i3-sensible-terminal/exec st/' ~/.config/i3/config
 sed -i 's/set \\\$up l/set \\\$up k/; s/set \\\$down k/set \\\$down j/; s/set \\\$left j/set \\\$left h/; s/set \\\$right semicolon/set \\\$right l/' ~/.config/i3/config
 echo 'bindsym Mod1+Shift+l exec --no-startup-id slock
 bindsym \\\$mod+Shift+s exec --no-startup-id "scrot -s - | xclip -sel clip -t image/png"
-bindsym \\\$mod+q kill' >> ~/.config/i3/config
+bindsym \\\$mod+q kill
+bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl set +5%
+bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-' >> ~/.config/i3/config
 cat > ~/.xinitrc <<'XINIT_EOF'
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
