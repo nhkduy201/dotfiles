@@ -19,7 +19,7 @@ Options:
   -r  Install AUR packages
   -s  Install suckless software (DWM only)
   -c  Copy dotfiles
-  -a  Run all options
+  -a  Run all options (requires wm_choice)
   -t  Prepare touchpad
   -g  Git configuration
   -k  Keyboard backlight
@@ -32,7 +32,7 @@ Options:
   -h  Disable telemetry for an-anime-game-launcher-bin
   -G  Install gaming packages
 
-wm_choice: 'dwm' or 'i3'
+wm_choice: 'dwm' or 'i3' (required if -a is used)
 EOF
   exit 1
 }
@@ -178,14 +178,15 @@ download_softwares() {
   if [ ${#to_install[@]} -eq 0 ]; then
     to_install=("discord" "cursor" "protonup")
   fi
-  runuser -l $SUDO_USER -c "bash -c \"
+  # Pass the array elements as positional arguments to the user's script
+  sudo -u $SUDO_USER bash -c '
   mkdir -p ~/Downloads ~/.local/bin
   cd ~/Downloads
-  for app in ${to_install[@]}; do
-    case \$app in
+  for app in "$@"; do
+    case "$app" in
       discord)
         rm -rf Discord discord-*.tar.gz
-        wget --content-disposition -O discord.tar.gz --user-agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36' 'https://discord.com/api/download?platform=linux&format=tar.gz'
+        wget --content-disposition -O discord.tar.gz --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36" "https://discord.com/api/download?platform=linux&format=tar.gz"
         tar xzf discord.tar.gz
         ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
         ;;
@@ -196,16 +197,16 @@ download_softwares() {
         ;;
       protonup)
         rm -rf ProtonUp-Qt-*-x86_64.AppImage
-        wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-        chmod u+x ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-        ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
+        wget -q "https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v'"${PROTONUP_VERSION}"'/ProtonUp-Qt-'"${PROTONUP_VERSION}"'-x86_64.AppImage"
+        chmod u+x "ProtonUp-Qt-'"${PROTONUP_VERSION}"'-x86_64.AppImage"
+        ln -sf "$HOME/Downloads/ProtonUp-Qt-'"${PROTONUP_VERSION}"'-x86_64.AppImage" ~/.local/bin/protonup-qt
         ;;
     esac
   done
-  \"
-  "
+  ' _ "${to_install[@]}"
+  # Handle cursor symlink if installed
   if [[ " ${to_install[@]} " =~ " cursor " ]]; then
-    ln -sf /home/$SUDO_USER/Downloads/cursor-*x86_64.AppImage /usr/local/bin/cursor
+    ln -sf "/home/$SUDO_USER/Downloads/cursor-"*x86_64.AppImage /usr/local/bin/cursor
   fi
 }
 
@@ -279,6 +280,11 @@ configure_check_network() {
 }
 
 run_all_options() {
+  # Check if WM_CHOICE is set
+  if [[ -z "$WM_CHOICE" ]]; then
+    echo "Error: Window manager choice (dwm/i3) is required when using -a"
+    usage
+  fi
   configure_check_network
   install_pacman_packages
   install_aur_packages
@@ -354,19 +360,18 @@ if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
 fi
-WM_CHOICE="${!#}"
-if [ "$WM_CHOICE" != "dwm" ] && [ "$WM_CHOICE" != "i3" ]; then
-  echo "Error: Invalid window manager choice. Use 'dwm' or 'i3'."
-  usage
-fi
+
 declare -a download_choices=()
+WM_CHOICE=""
+RUN_ALL=false
+
 while getopts ":prscatdD:gkbmnhG" opt; do
   case "${opt}" in
     p) install_pacman_packages ;;
     r) install_aur_packages ;;
     s) install_suckless_software ;;
     c) copy_dotfiles ;;
-    a) run_all_options ;;
+    a) RUN_ALL=true ;;
     t) prepare_touchpad ;;
     g) git_config ;;
     k) keyboard_backlight ;;
@@ -380,6 +385,27 @@ while getopts ":prscatdD:gkbmnhG" opt; do
     *) usage ;;
   esac
 done
+
+# Shift processed options
+shift $((OPTIND -1))
+
+# Handle WM_CHOICE and -a logic
+if $RUN_ALL; then
+  if [ $# -eq 0 ]; then
+    echo "Error: Window manager choice (dwm/i3) is required when using -a"
+    usage
+  fi
+  WM_CHOICE="$1"
+  if [ "$WM_CHOICE" != "dwm" ] && [ "$WM_CHOICE" != "i3" ]; then
+    echo "Error: Invalid window manager choice. Use 'dwm' or 'i3'."
+    usage
+  fi
+elif [ $# -gt 0 ]; then
+  # Check if there's an extraneous positional argument
+  echo "Error: Extraneous arguments. Window manager choice is only required with -a."
+  usage
+fi
+
 if [ "$DO_DOWNLOAD" = true ]; then
   download_softwares "${download_choices[@]}"
 fi
