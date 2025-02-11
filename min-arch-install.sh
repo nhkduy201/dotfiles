@@ -168,7 +168,7 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
 [core]
     pager = vim --not-a-term -R -
 [difftool "vim"]
-    cmd = vim -d "\$LOCAL" "\$REMOTE"
+    cmd = vim -d "\\$LOCAL" "\\$REMOTE"
 [difftool]
     prompt = false
 [diff]
@@ -176,8 +176,8 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
 GITCFG_EOF
 cat >> ~/.bashrc <<'BASHRC_EOF'
 reverse_search_dmenu() {
-    local r=$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "$READLINE_LINE" | tac | awk '!a[$0]++' | dmenu -l 10 -p "History> ")
-    [[ -n "$r" ]] && READLINE_LINE="$r" && READLINE_POINT=${#READLINE_LINE}
+    local r=\$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "\$READLINE_LINE" | tac | awk '!a[\$0]++' | dmenu -l 10 -p "History> ")
+    [[ -n "\$r" ]] && READLINE_LINE="\$r" && READLINE_POINT=\${#READLINE_LINE}
 }
 bind -x '"\C-r": reverse_search_dmenu'
 export HISTCONTROL=ignoreboth
