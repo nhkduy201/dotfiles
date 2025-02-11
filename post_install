@@ -23,7 +23,9 @@ Options:
   -t  Prepare touchpad
   -g  Git configuration
   -k  Keyboard backlight
-  -d  Download softwares
+  -d  Download softwares (all by default)
+      Use with -D to specify which to download:
+      -D discord -D cursor -D protonup
   -b  Secure boot
   -m  Change GRUB
   -n  Set up systemd resolved
@@ -172,27 +174,39 @@ prepare_touchpad() {
 
 download_softwares() {
   local PROTONUP_VERSION="2.9.1"
-  #local NVIDIA_VERSION="550.54.14"
-  #wget -q https://us.download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
-  # NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run
-  # sudo ./NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run -s
-
+  local to_install=("$@")
+  if [ ${#to_install[@]} -eq 0 ]; then
+    to_install=("discord" "cursor" "protonup")
+  fi
   runuser -l $SUDO_USER -c "bash -c \"
-  mkdir -p ~/Downloads
+  mkdir -p ~/Downloads ~/.local/bin
   cd ~/Downloads
-  rm -rf Discord discord-*.tar.gz ProtonUp-Qt-*-x86_64.AppImage
-  wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-  
-  curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
-  wget --content-disposition -O discord.tar.gz --user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36\" \"https://discord.com/api/download?platform=linux&format=tar.gz\"
-  tar xzf discord.tar.gz
-  mkdir -p ~/.local/bin
-  chmod u+x cursor-*x86_64.AppImage ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
-  ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
-  ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
+  for app in ${to_install[@]}; do
+    case \$app in
+      discord)
+        rm -rf Discord discord-*.tar.gz
+        wget --content-disposition -O discord.tar.gz --user-agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36' 'https://discord.com/api/download?platform=linux&format=tar.gz'
+        tar xzf discord.tar.gz
+        ln -sf ~/Downloads/Discord/Discord ~/.local/bin/discord
+        ;;
+      cursor)
+        rm -rf cursor-*.AppImage
+        curl -OJLs https://downloader.cursor.sh/linux/appImage/x64
+        chmod u+x cursor-*x86_64.AppImage
+        ;;
+      protonup)
+        rm -rf ProtonUp-Qt-*-x86_64.AppImage
+        wget -q https://github.com/DavidoTek/ProtonUp-Qt/releases/download/v${PROTONUP_VERSION}/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
+        chmod u+x ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage
+        ln -sf ~/Downloads/ProtonUp-Qt-${PROTONUP_VERSION}-x86_64.AppImage ~/.local/bin/protonup-qt
+        ;;
+    esac
+  done
   \"
   "
-  ln -sf /home/$SUDO_USER/Downloads/cursor-*x86_64.AppImage /usr/local/bin/cursor
+  if [[ " ${to_install[@]} " =~ " cursor " ]]; then
+    ln -sf /home/$SUDO_USER/Downloads/cursor-*x86_64.AppImage /usr/local/bin/cursor
+  fi
 }
 
 git_config() {
@@ -340,15 +354,13 @@ if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
 fi
-
-# Process window manager choice
 WM_CHOICE="${!#}"
 if [ "$WM_CHOICE" != "dwm" ] && [ "$WM_CHOICE" != "i3" ]; then
   echo "Error: Invalid window manager choice. Use 'dwm' or 'i3'."
   usage
 fi
-
-while getopts ":prscatdgkbmnhG" opt; do
+declare -a download_choices=()
+while getopts ":prscatdD:gkbmnhG" opt; do
   case "${opt}" in
     p) install_pacman_packages ;;
     r) install_aur_packages ;;
@@ -358,7 +370,8 @@ while getopts ":prscatdgkbmnhG" opt; do
     t) prepare_touchpad ;;
     g) git_config ;;
     k) keyboard_backlight ;;
-    d) download_softwares ;;
+    d) DO_DOWNLOAD=true ;;
+    D) download_choices+=("$OPTARG") ;;
     b) secure_boot ;;
     m) change_grub ;;
     n) setup_systemd_resolved ;;
@@ -367,3 +380,6 @@ while getopts ":prscatdgkbmnhG" opt; do
     *) usage ;;
   esac
 done
+if [ "$DO_DOWNLOAD" = true ]; then
+  download_softwares "${download_choices[@]}"
+fi
