@@ -1,0 +1,2 @@
+When you are at coffee, connecting to public wifi, they usually have 'captive portal' to connect, they have their own DNS kind of things, not sure, but if you want to access to the site to login for the wifi, you need to stop systemd resolved.
+sudo systemctl stop systemd-resolved
