@@ -11,9 +11,54 @@ INSTALL_MODE="clean"
 BROWSER="edge"
 UEFI_MODE=0
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-DISK=$(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}' | grep -E '^nvme' | head -1)
-DISK="/dev/$DISK"
-[[ -b "$DISK" ]] || { echo "No NVMe disk"; lsblk; exit 1; }
+detect_install_disk() {
+    local is_vm=0
+    local vm_hint=""
+    if grep -qi "vmware" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "virtualbox" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        is_vm=1
+        vm_hint=$(grep -i "vmware\|virtualbox\|qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null)
+    fi
+    if ((is_vm)); then
+        echo "Detected virtual environment: $vm_hint" >&2
+        if [[ -b "/dev/sda" ]]; then
+            echo "/dev/sda"
+            return 0
+        fi
+    fi
+    local ventoy_disk=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
+    if [[ -n "$ventoy_disk" ]]; then
+        echo "Detected Ventoy installation at $ventoy_disk - avoiding this disk" >&2
+        local ventoy_parent=$(lsblk -no PKNAME "$ventoy_disk" | head -1)
+        [[ -n "$ventoy_parent" ]] && ventoy_parent="/dev/$ventoy_parent"
+    fi
+    local available_disks=($(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}'))
+    for disk in "${available_disks[@]}"; do
+        disk="/dev/$disk"
+        [[ "$disk" == "$ventoy_parent" ]] && continue
+        if [[ "$disk" =~ ^/dev/nvme ]]; then
+            echo "$disk"
+            return 0
+        fi
+    done
+    for disk in "${available_disks[@]}"; do
+        disk="/dev/$disk"
+        [[ "$disk" == "$ventoy_parent" ]] && continue
+        echo "$disk"
+        return 0
+    done
+    return 1
+}
+get_partition_device() {
+    local disk="$1"
+    local part_num="$2"
+    if [[ "$disk" =~ ^/dev/nvme ]]; then
+        echo "${disk}p${part_num}"
+    else
+        echo "${disk}${part_num}"
+    fi
+}
+DISK=$(detect_install_disk)
+[[ -b "$DISK" ]] || { echo "No suitable disk found"; lsblk; exit 1; }
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -35,8 +80,8 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
-    BOOT_PART="${DISK}p1"
-    ROOT_PART="${DISK}p2"
+    BOOT_PART=$(get_partition_device "$DISK" "1")
+    ROOT_PART=$(get_partition_device "$DISK" "2")
 else
     FORMAT_BOOT=0
     if ((UEFI_MODE)); then
@@ -45,14 +90,14 @@ else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-            BOOT_PART="${DISK}p1"
+            BOOT_PART=$(get_partition_device "$DISK" "1")
             FORMAT_BOOT=1
         fi
     else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
-            BOOT_PART="${DISK}p1"
+            BOOT_PART=$(get_partition_device "$DISK" "1")
             FORMAT_BOOT=1
         fi
     fi
@@ -62,7 +107,7 @@ else
     START_POINT=$((LAST_PART_END + 1))
     parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
     PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
-    ROOT_PART="${DISK}p${PART_NUM}"
+    ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
 fi
 if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
     if ((UEFI_MODE)); then
