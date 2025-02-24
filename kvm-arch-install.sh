@@ -27,11 +27,16 @@ sudo virt-install \
     --machine q35 \
     --console pty,target_type=serial &> ./virt-install.log &
 ## Wait for VM to be accessible and run installation script
-while ! sshpass -p 1 ssh \
+while ! (sshpass -p 1 scp \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    ./min-arch-install.sh \
+    root@$(sudo virsh domifaddr archlinux | grep -Po '(\d+\.){3}\d+'):/tmp/ && \
+    sshpass -p 1 ssh \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     root@$(sudo virsh domifaddr archlinux | grep -Po '(\d+\.){3}\d+') \
-    'yes | bash <(curl -sL https://raw.githubusercontent.com/nhkduy201/dotfiles/main/min-arch-install.sh) -m clean -p 1'
+    'yes | bash /tmp/min-arch-install.sh -m clean -p 1')
 do
     sleep 1
 done
