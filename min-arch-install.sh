@@ -241,6 +241,29 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
 [diff]
     tool = vim
 GITCFG_EOF
+cat > ~/.tmux.conf <<'TMUX_EOF'
+setw -g mode-keys vi
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+bind-key -r J resize-pane -D 3
+bind-key -r K resize-pane -U 3
+bind-key -r H resize-pane -L 3
+bind-key -r L resize-pane -R 3
+bind '"' split-window -c "#{pane_current_path}"
+bind % split-window -h -c "#{pane_current_path}"
+bind c new-window -c "#{pane_current_path}"
+set-option -g history-limit 1000000
+set-option -g mouse on
+set-option -s set-clipboard off
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-no-clear "xclip -sel clip"
+bind-key -T copy-mode-vi DoubleClick1Pane select-pane \; send-keys -X select-word \; send-keys -X copy-pipe-no-clear "xclip -sel clip"
+bind-key -n DoubleClick1Pane select-pane \; copy-mode -M \; send-keys -X select-word \; send-keys -X copy-pipe-no-clear "xclip -sel clip"
+bind-key -T copy-mode-vi 'v' send -X begin-selection
+bind-key -T copy-mode-vi 'y' send -X copy-pipe "xclip -sel clip -i"
+bind-key C-m set-option -g mouse \; display-message 'mouse #{?mouse,on,off}'
+TMUX_EOF
 cat >> ~/.bashrc <<'BASHRC_EOF'
 reverse_search_dmenu() {
     local r=\\$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "\\$READLINE_LINE" | tac | awk '!a[\\$0]++' | dmenu -l 10 -p "History> ")
