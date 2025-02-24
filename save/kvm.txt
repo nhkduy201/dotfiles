@@ -51,7 +51,7 @@ sudo virt-install \
   --os-variant generic \
   --network network=default \
   --graphics vnc \
-  --boot loader=/usr/share/seabios/bios.bin,loader_ro=yes,loader_type=rom,loader_secure=no \
+  --boot menu=on,useserial=on \
   --machine q35 \
   --console pty,target_type=serial
 
