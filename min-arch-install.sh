@@ -194,7 +194,7 @@ chmod 440 /etc/sudoers.d/l5p-kbl
 sudo -u $USERNAME bash <<USER_EOF
 cd ~
 git clone https://aur.archlinux.org/paru-bin.git
-cd paru-bin && makepkg -si --noconfirm
+makepkg -D paru-bin/ -si --noconfirm
 [[ "$BROWSER" == "edge" ]] && paru -S --noconfirm ibus-bamboo microsoft-edge-stable-bin || paru -S --noconfirm ibus-bamboo librewolf-bin
 paru -G st
 cd st
@@ -243,8 +243,8 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
 GITCFG_EOF
 cat >> ~/.bashrc <<'BASHRC_EOF'
 reverse_search_dmenu() {
-    local r=$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "$READLINE_LINE" | tac | awk '!a[$0]++' | dmenu -l 10 -p "History> ")
-    [[ -n "$r" ]] && READLINE_LINE="$r" && READLINE_POINT=${#READLINE_LINE}
+    local r=\\$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "\\$READLINE_LINE" | tac | awk '!a[\\$0]++' | dmenu -l 10 -p "History> ")
+    [[ -n "\\$r" ]] && READLINE_LINE="\\$r" && READLINE_POINT=\\${#READLINE_LINE}
 }
 bind -x '"\C-r": reverse_search_dmenu'
 export HISTCONTROL=ignoreboth
