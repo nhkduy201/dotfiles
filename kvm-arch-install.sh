@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 ## Install required packages
 #sudo pacman -S --needed --noconfirm qemu virt-manager virt-viewer libvirt ebtables dnsmasq bridge-utils
 ## Enable and start libvirt service
@@ -25,7 +25,7 @@ sudo virt-install \
     --boot menu=on,useserial=on \
     --graphics vnc \
     --machine q35 \
-    --console pty,target_type=serial
+    --console pty,target_type=serial &> ./virt-install.log &
 ## Wait for VM to be accessible and run installation script
 while ! sshpass -p 1 ssh \
     -o StrictHostKeyChecking=no \
