@@ -134,6 +134,8 @@ mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
+pacman-key --init
+pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring
 base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils tmux)
 ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
