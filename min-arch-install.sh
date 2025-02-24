@@ -158,7 +158,9 @@ mkinitcpio -P
 if ((UEFI_MODE)); then
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
-    grub-install --target=i386-pc "$DISK"
+    grub-install --target=i386-pc --boot-directory=/boot --recheck "$DISK"
+    echo 'GRUB_TERMINAL_INPUT="console"' >> /etc/default/grub
+    echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
 fi
 [[ "$INSTALL_MODE" == "dual" ]] && echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 sed -i 's/GRUB_TIMEOUT=5/GRUB_TIMEOUT=1/' /etc/default/grub
