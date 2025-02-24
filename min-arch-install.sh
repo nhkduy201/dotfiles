@@ -24,6 +24,10 @@ detect_install_disk() {
             echo "/dev/sda"
             return 0
         fi
+        if [[ -b "/dev/vda" ]]; then
+            echo "/dev/vda"
+            return 0
+        fi
     fi
     local ventoy_disk=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
     if [[ -n "$ventoy_disk" ]]; then
@@ -77,11 +81,20 @@ if [[ $INSTALL_MODE == "clean" ]]; then
     lsblk -o NAME,SIZE,MODEL,TRAN,ROTA "$DISK"
     read -rp $"ERASE $DISK? (y/n) " a
     [[ "$a" =~ ^[Yy]$ ]] || exit 1
-    parted -s "$DISK" mklabel gpt
-    parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-    parted -s "$DISK" mkpart primary ext4 513MiB 100%
-    BOOT_PART=$(get_partition_device "$DISK" "1")
-    ROOT_PART=$(get_partition_device "$DISK" "2")
+    if ((UEFI_MODE)); then
+        parted -s "$DISK" mklabel gpt
+        parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
+        parted -s "$DISK" mkpart primary ext4 513MiB 100%
+        BOOT_PART=$(get_partition_device "$DISK" "1")
+        ROOT_PART=$(get_partition_device "$DISK" "2")
+    else
+        parted -s "$DISK" mklabel msdos
+        parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
+        parted -s "$DISK" set 1 boot on
+        parted -s "$DISK" mkpart primary ext4 513MiB 100%
+        BOOT_PART=$(get_partition_device "$DISK" "1")
+        ROOT_PART=$(get_partition_device "$DISK" "2")
+    fi
 else
     FORMAT_BOOT=0
     if ((UEFI_MODE)); then
