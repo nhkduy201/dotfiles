@@ -35,22 +35,24 @@ sudo virt-install \
   --memory 2048 \
   --vcpus 2 \
   --disk size=20 \
-  --cdrom '/var/lib/libvirt/images/archlinux-2024.02.01-x86_64.iso' \
+  --cdrom '/var/lib/libvirt/images/archlinux-2025.02.01-x86_64.iso' \
   --os-variant generic \
   --network network=default \
   --graphics vnc \
-  --boot menu=on
+  --boot menu=on,useserial=on \
+  --console pty,target_type=serial
 
 sudo virt-install \
   --name archlinux \
   --memory 2048 \
   --vcpus 2 \
   --disk size=20 \
-  --cdrom '/var/lib/libvirt/images/archlinux-2024.02.01-x86_64.iso' \
+  --cdrom '/var/lib/libvirt/images/archlinux-2025.02.01-x86_64.iso' \
   --os-variant generic \
   --network network=default \
   --graphics vnc \
-  --boot menu=on,useserial=on \
+  --boot loader=/usr/share/seabios/bios.bin,loader_ro=yes,loader_type=rom,loader_secure=no \
+  --machine q35 \
   --console pty,target_type=serial
 
 sudo virsh list --all
