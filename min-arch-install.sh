@@ -135,7 +135,7 @@ mkdir -p /mnt/boot/efi
 mount "$BOOT_PART" /mnt/boot/efi
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman -Sy --noconfirm archlinux-keyring
-base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils)
+base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils tmux)
 ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
 [[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
 pacstrap /mnt "${base_pkgs[@]}"
@@ -224,7 +224,7 @@ export QT_IM_MODULE=ibus
 ibus-daemon -drx &
 gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
 gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
-sudo python \$HOME/l5p-kbl/l5p_kbl.py static a020f0
+sudo python \\$HOME/l5p-kbl/l5p_kbl.py static a020f0
 exec i3
 XINIT_EOF
 cat > ~/.gitconfig <<'GITCFG_EOF'
@@ -249,7 +249,8 @@ reverse_search_dmenu() {
 bind -x '"\C-r": reverse_search_dmenu'
 export HISTCONTROL=ignoreboth
 export EDITOR=vim
-startx
+pgrep -x "Xorg" > /dev/null || startx
+[[ \\$TERM_PROGRAM != "vscode" ]] && [[ -z \\$TMUX ]] && { tmux attach || tmux; }
 BASHRC_EOF
 systemctl --user enable --now pipewire{,-pulse} wireplumber
 USER_EOF
