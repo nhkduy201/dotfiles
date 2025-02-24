@@ -52,3 +52,8 @@ sudo virt-install \
   --graphics vnc \
   --boot menu=on,useserial=on \
   --console pty,target_type=serial
+
+sudo virsh list --all
+sudo virsh shutdown archlinux
+sudo virsh destroy archlinux
+sudo virsh undefine archlinux --remove-all-storage
