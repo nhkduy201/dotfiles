@@ -91,16 +91,38 @@ log() {
 # Error handling with logging
 error_log() {
     local error_msg="$1"
-    local log_url=$(echo "Error: $error_msg
-Time: $(date)
-System Info: $(uname -a)
-Memory: $(free -h)
-Disk info: $(fdisk -l "$DISK" 2>/dev/null || echo 'N/A')
-$(lsblk -f "$DISK" 2>/dev/null || echo 'N/A')
-Last commands: $(tail -n 20 "$LOG_FILE")" | nc termbin.com 9999)
+    local temp_log="/tmp/error_details_$$.log"
+    {
+        echo "Error: $error_msg"
+        echo "Time: $(date)"
+        echo "System Info: $(uname -a)"
+        echo "Memory: $(free -h)"
+        echo "Disk info: $(fdisk -l "$DISK" 2>/dev/null || echo 'N/A')"
+        echo "$(lsblk -f "$DISK" 2>/dev/null || echo 'N/A')"
+        echo "Last commands: $(tail -n 20 "$LOG_FILE")"
+    } > "$temp_log"
+
+    # Try multiple times to upload to termbin
+    local max_attempts=3
+    local attempt=1
+    local log_url=""
     
+    while [ $attempt -le $max_attempts ]; do
+        log_url=$(cat "$temp_log" | nc termbin.com 9999 2>/dev/null || echo "")
+        if [[ -n "$log_url" && "$log_url" =~ ^https?:// ]]; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+
     log "ERROR" "$error_msg"
-    log "INFO" "Error details logged to: $log_url"
+    if [[ -n "$log_url" && "$log_url" =~ ^https?:// ]]; then
+        log "INFO" "Error details logged to: $log_url"
+    else
+        log "ERROR" "Failed to upload error log to termbin.com"
+        log "INFO" "Error details saved locally at: $temp_log"
+    fi
     exit 1
 }
 
@@ -377,8 +399,17 @@ main() {
                 FORMAT_BOOT=1
             fi
         fi
-        FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {size=$3; gsub("MB","",$3); if($3 > max) max=$3} END {print max}')
-        [[ $FREE_SPACE -ge 10240 ]] || { log "ERROR" "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"; exit 1; }
+        FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {
+            gsub("MB","",$3)
+            if ($3 + 0 > max + 0) max = $3
+        } END {print max}')
+        
+        # Convert to integer MB for comparison
+        FREE_SPACE_INT=${FREE_SPACE%.*}
+        if [[ -z "$FREE_SPACE_INT" ]] || [[ $FREE_SPACE_INT -lt 10240 ]]; then
+            log "ERROR" "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"
+            exit 1
+        fi
         LAST_PART_END=$(parted -s "$DISK" unit MB print | awk '/^ [0-9]+ / {end=$3} END {gsub("MB","",end); print end}')
         START_POINT=$((LAST_PART_END + 1))
         parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
