@@ -160,14 +160,33 @@ else
             FORMAT_BOOT=1
         fi
     fi
-    FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {size=$3; gsub("MB","",$3); if($3 > max) max=$3} END {print max}')
-    [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"; exit 1; }
-    LAST_PART_END=$(parted -s "$DISK" unit MB print | awk '/^ [0-9]+ / {end=$3} END {gsub("MB","",end); print end}')
+
+    # Improved free space detection that handles decimal values
+    FREE_SPACE=$(parted -s "$DISK" unit MiB print free | awk '
+        /Free Space/ {
+            gsub("MiB","",$3)
+            if (int($3) > max) max = int($3)
+        } 
+        END {print max}
+    ')
+    
+    [[ -z "$FREE_SPACE" ]] && FREE_SPACE=0
+    [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MiB)"; exit 1; }
+
+    # Find last partition end point more reliably
+    LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '
+        /^ [0-9]+ / {
+            gsub("MiB","",$3)
+            if (int($3) > end) end = int($3)
+        } 
+        END {print end}
+    ')
     START_POINT=$((LAST_PART_END + 1))
-    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
+    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
     PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
     ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
 fi
+
 if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
     if ((UEFI_MODE)); then
         mkfs.fat -F32 "$BOOT_PART"
