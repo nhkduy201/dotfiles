@@ -129,10 +129,18 @@ if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
         mkfs.ext4 -F "$BOOT_PART"
     fi
 fi
+
 mkfs.ext4 -F "$ROOT_PART"
 mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot/efi
-mount "$BOOT_PART" /mnt/boot/efi
+
+if ((UEFI_MODE)); then
+    mkdir -p /mnt/boot/efi
+    mount "$BOOT_PART" /mnt/boot/efi
+else
+    mkdir -p /mnt/boot
+    mount "$BOOT_PART" /mnt/boot
+fi
+
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
@@ -173,7 +181,13 @@ mkinitcpio -P
 if ((UEFI_MODE)); then
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
-    grub-install --target=i386-pc --boot-directory=/boot --recheck "$DISK"
+    # Make sure boot partition is marked as bootable
+    if [[ $INSTALL_MODE == "clean" ]]; then
+        parted -s "$DISK" set 1 boot on
+    fi
+    # Use the correct boot directory and be explicit about the device
+    grub-install --target=i386-pc --boot-directory=/boot "$DISK"
+    # Add these only if you're having console issues
     echo 'GRUB_TERMINAL_INPUT="console"' >> /etc/default/grub
     echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
 fi
