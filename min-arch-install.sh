@@ -270,13 +270,10 @@ main() {
     detect_install_disk() {
         local is_vm=0
         local vm_hint=""
-        local ventoy_parent=""  # Initialize the variable
-        
         if grep -qi "vmware" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "virtualbox" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
             is_vm=1
             vm_hint=$(grep -i "vmware\|virtualbox\|qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null)
         fi
-        
         if ((is_vm)); then
             log "INFO" "Detected virtual environment: $vm_hint"
             if [[ -b "/dev/sda" ]]; then
@@ -288,38 +285,27 @@ main() {
                 return 0
             fi
         fi
-        
         local ventoy_disk=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
         if [[ -n "$ventoy_disk" ]]; then
             log "INFO" "Detected Ventoy installation at $ventoy_disk - avoiding this disk"
-            ventoy_parent=$(lsblk -no PKNAME "$ventoy_disk" 2>/dev/null | head -1 || true)
+            local ventoy_parent=$(lsblk -no PKNAME "$ventoy_disk" | head -1)
             [[ -n "$ventoy_parent" ]] && ventoy_parent="/dev/$ventoy_parent"
         fi
-        
         local available_disks=($(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}'))
-        if [[ ${#available_disks[@]} -eq 0 ]]; then
-            log "ERROR" "No suitable disks found"
-            return 1
-        fi
-        
-        # Prefer NVMe drives first
         for disk in "${available_disks[@]}"; do
             disk="/dev/$disk"
-            [[ -n "$ventoy_parent" && "$disk" == "$ventoy_parent" ]] && continue
+            [[ "$disk" == "$ventoy_parent" ]] && continue
             if [[ "$disk" =~ ^/dev/nvme ]]; then
                 echo "$disk"
                 return 0
             fi
         done
-        
-        # Fall back to first available non-Ventoy disk
         for disk in "${available_disks[@]}"; do
             disk="/dev/$disk"
-            [[ -n "$ventoy_parent" && "$disk" == "$ventoy_parent" ]] && continue
+            [[ "$disk" == "$ventoy_parent" ]] && continue
             echo "$disk"
             return 0
         done
-        
         return 1
     }
 
@@ -571,9 +557,6 @@ CHROOT_EOF
     umount -l -R /mnt
     reboot
 }
-
-# Improve error handling trap
-trap 'last_command=$current_command; current_command=$BASH_COMMAND; log "ERROR" "Command \"${last_command}\" failed with exit code $? on line $LINENO"; error_log "Command \"${last_command}\" failed on line $LINENO"' ERR
 
 # Script entry point
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
