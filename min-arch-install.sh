@@ -1,406 +1,148 @@
-#!/bin/bash
-
-# Strict mode
-set -euo pipefail
-IFS=$'\n\t'
-
-# Script constants
-readonly SCRIPT_VERSION="1.0.0"
-readonly SCRIPT_NAME=$(basename "$0")
-readonly LOG_FILE="/tmp/min-arch.log"
-readonly DEBUG_LOG="/mnt/var/log/min-arch-install.log"
-readonly MIN_RAM_MB=2048
-readonly MIN_DISK_GB=20
-
-# Debug mode flag
-DEBUG_MODE=0
-
-# Default values
+#!/bin/bash -x
+set -eo pipefail
+trap 'error_log "Error on line $LINENO"' ERR
+error_log() { local error_msg="$1"; echo "Error: $error_msg Time: $(date) Disk info: $(fdisk -l "$DISK") $(lsblk -f "$DISK") Last commands: $(tail -n 20 /var/log/min-arch.log)" | nc termbin.com 9999; }
+exec 1> >(tee -a /var/log/min-arch.log)
+exec 2> >(tee -a /var/log/min-arch.log >&2)
 HOSTNAME="archlinux"
 USERNAME="kayd"
 TIMEZONE="Asia/Ho_Chi_Minh"
 INSTALL_MODE="clean"
 BROWSER="edge"
 UEFI_MODE=0
-
-# Enhanced logging function with debug support
-log() {
-    local level="$1"
-    shift
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$level] $timestamp: $*"
-    
-    echo "$message" | tee -a "$LOG_FILE"
-    
-    if [[ $DEBUG_MODE -eq 1 ]] || [[ $level == "DEBUG" ]]; then
-        # Add extra debug info
-        {
-            echo "[$level] $timestamp: $*"
-            echo "  -> Function: ${FUNCNAME[1]}"
-            echo "  -> Line: ${BASH_LINENO[0]}"
-            echo "  -> Command: $BASH_COMMAND"
-            echo "  -> Stack trace:"
-            local frame=0
-            while caller $frame; do
-                ((frame++))
-            done 2>/dev/null
-            echo "----------------------------------------"
-        } >> "$DEBUG_LOG"
+[[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
+detect_install_disk() {
+    local is_vm=0
+    local vm_hint=""
+    if grep -qi "vmware" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "virtualbox" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        is_vm=1
+        vm_hint=$(grep -i "vmware\|virtualbox\|qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null)
     fi
-}
-
-# Debug logging wrapper
-debug_log() {
-    [[ $DEBUG_MODE -eq 1 ]] && log "DEBUG" "$@"
-}
-
-# Help message
-usage() {
-    cat <<EOF
-Usage: $SCRIPT_NAME [OPTIONS]
-Arch Linux installation script
-
-Options:
-    -m, --mode MODE       Installation mode (clean|dual)
-    -d, --disk DEVICE    Target disk device
-    -p, --password PWD   Root and user password
-    -b, --browser NAME   Browser to install (edge|librewolf)
-    -v, --verbose        Enable verbose debug logging
-    -h, --help          Show this help message
-    --version           Show version information
-
-Example:
-    $SCRIPT_NAME -m clean -d /dev/sda -p mypassword -b edge -v
-EOF
-    exit 1
-}
-
-# Version information
-version() {
-    echo "$SCRIPT_NAME version $SCRIPT_VERSION"
-    exit 0
-}
-
-# Logging function
-log() {
-    local level="$1"
-    shift
-    echo "[$level] $(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a "$LOG_FILE"
-}
-
-# Error handling with logging
-error_log() {
-    local error_msg="$1"
-    local log_url=$(echo "Error: $error_msg
-Time: $(date)
-System Info: $(uname -a)
-Memory: $(free -h)
-Disk info: $(fdisk -l "$DISK" 2>/dev/null || echo 'N/A')
-$(lsblk -f "$DISK" 2>/dev/null || echo 'N/A')
-Last commands: $(tail -n 20 "$LOG_FILE")" | nc termbin.com 9999)
-    
-    log "ERROR" "$error_msg"
-    log "INFO" "Error details logged to: $log_url"
-    exit 1
-}
-
-# Input validation with timeout
-confirm_with_timeout() {
-    local prompt="$1"
-    local timeout=30
-    read -t $timeout -rp "$prompt" response || {
-        log "ERROR" "No response within $timeout seconds"
-        exit 1
-    }
-    [[ "$response" =~ ^[Yy]$ ]] || exit 1
-}
-
-# System requirements check
-check_system_requirements() {
-    log "INFO" "Checking system requirements..."
-    
-    # Check RAM
-    local total_ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-    local total_ram_mb=$((total_ram_kb / 1024))
-    if [[ $total_ram_mb -lt $MIN_RAM_MB ]]; then
-        error_log "Insufficient RAM. Required: ${MIN_RAM_MB}MB, Available: ${total_ram_mb}MB"
-    fi
-    
-    # Check disk space
-    if [[ -b "$DISK" ]]; then
-        local disk_size_bytes=$(blockdev --getsize64 "$DISK")
-        local disk_size_gb=$((disk_size_bytes / 1024 / 1024 / 1024))
-        if [[ $disk_size_gb -lt $MIN_DISK_GB ]]; then
-            error_log "Insufficient disk space. Required: ${MIN_DISK_GB}GB, Available: ${disk_size_gb}GB"
+    if ((is_vm)); then
+        echo "Detected virtual environment: $vm_hint" >&2
+        if [[ -b "/dev/sda" ]]; then
+            echo "/dev/sda"
+            return 0
+        fi
+        if [[ -b "/dev/vda" ]]; then
+            echo "/dev/vda"
+            return 0
         fi
     fi
-
-    log "INFO" "System requirements check passed"
-}
-
-# Package verification
-verify_packages() {
-    log "INFO" "Verifying package availability..."
-    local failed_pkgs=()
-    for pkg in "$@"; do
-        if ! pacman -Si "$pkg" &>/dev/null; then
-            failed_pkgs+=("$pkg")
-        fi
-    done
-    
-    if [[ ${#failed_pkgs[@]} -gt 0 ]]; then
-        error_log "Following packages not found: ${failed_pkgs[*]}"
+    local ventoy_disk=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
+    if [[ -n "$ventoy_disk" ]]; then
+        echo "Detected Ventoy installation at $ventoy_disk - avoiding this disk" >&2
+        local ventoy_parent=$(lsblk -no PKNAME "$ventoy_disk" | head -1)
+        [[ -n "$ventoy_parent" ]] && ventoy_parent="/dev/$ventoy_parent"
     fi
-    log "INFO" "Package verification completed"
-}
-
-# Create backup of important files
-create_backup() {
-    log "INFO" "Creating backup of important files..."
-    local backup_dir="/root/pre_install_backup_$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$backup_dir"
-    
-    # List of important files to backup
-    local files_to_backup=(
-        "/etc/fstab"
-        "/etc/default/grub"
-        "/boot/grub/grub.cfg"
-    )
-
-    for file in "${files_to_backup[@]}"; do
-        if [[ -f "$file" ]]; then
-            cp -p "$file" "$backup_dir/" || log "WARN" "Failed to backup $file"
-        fi
-    done
-    
-    log "INFO" "Backup created at $backup_dir"
-}
-
-# Initialize logging
-init_logging() {
-    if [[ $DEBUG_MODE -eq 1 ]]; then
-        # In debug mode, all logs go to DEBUG_LOG
-        mkdir -p "$(dirname "$DEBUG_LOG")"
-        touch "$DEBUG_LOG"
-        # Redirect all output to debug log
-        exec 1> >(tee -a "$DEBUG_LOG")
-        exec 2> >(tee -a "$DEBUG_LOG" >&2)
-    else
-        # In normal mode, use temporary log
-        touch "$LOG_FILE"
-        exec 1> >(tee -a "$LOG_FILE")
-        exec 2> >(tee -a "$LOG_FILE" >&2)
-    fi
-    
-    log "INFO" "Starting installation script v$SCRIPT_VERSION"
-}
-
-# System state logging
-log_system_state() {
-    if [[ $DEBUG_MODE -eq 1 ]]; then
-        {
-            echo "=== System State ==="
-            echo "Date: $(date)"
-            echo "Kernel: $(uname -a)"
-            echo "Memory:"
-            free -h
-            echo "Disk Space:"
-            df -h
-            echo "Block Devices:"
-            lsblk
-            echo "Mount Points:"
-            mount
-            echo "Network Interfaces:"
-            ip addr
-            echo "Process List:"
-            ps aux
-            echo "==================="
-        } >> "$DEBUG_LOG"
-    fi
-}
-
-# Main installation logic
-main() {
-    init_logging
-    
-    # Parse command line arguments
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help) usage ;;
-            --version) version ;;
-            -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
-            -d|--disk) DISK="$2"; shift 2 ;;
-            -p|--password) PASSWORD="$2"; shift 2 ;;
-            -b|--browser) BROWSER="$2"; shift 2 ;;
-            -v|--verbose) DEBUG_MODE=1; shift ;;
-            *) log "ERROR" "Unknown option: $1"; usage ;;
-        esac
-    done
-
-    # Initialize debug logging
-    if [[ $DEBUG_MODE -eq 1 ]]; then
-        log "INFO" "Debug mode enabled - detailed logs will be written to $DEBUG_LOG"
-        # Enable bash debugging
-        set -x
-        # Trace all commands
-        exec 19>&2
-        exec 2> >(tee -a "$DEBUG_LOG")
-        
-        # Log initial system state
-        log_system_state
-        
-        # Log script parameters
-        debug_log "Script parameters:"
-        debug_log "  INSTALL_MODE: $INSTALL_MODE"
-        debug_log "  DISK: $DISK"
-        debug_log "  BROWSER: $BROWSER"
-        debug_log "  UEFI_MODE: $UEFI_MODE"
-    fi
-
-    # Validate required parameters
-    [[ -n $PASSWORD ]] || { log "ERROR" "Password needed"; exit 1; }
-    [[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { log "ERROR" "Bad mode"; exit 1; }
-    [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { log "ERROR" "Bad browser"; exit 1; }
-    [[ $EUID -eq 0 ]] || { log "ERROR" "Need root"; exit 1; }
-
-    # Detect UEFI mode
-    [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-
-    # Detect installation disk
-    detect_install_disk() {
-        local is_vm=0
-        local vm_hint=""
-        if grep -qi "vmware" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "virtualbox" /sys/class/dmi/id/sys_vendor 2>/dev/null || grep -qi "qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-            is_vm=1
-            vm_hint=$(grep -i "vmware\|virtualbox\|qemu" /sys/class/dmi/id/sys_vendor 2>/dev/null)
-        fi
-        if ((is_vm)); then
-            log "INFO" "Detected virtual environment: $vm_hint"
-            if [[ -b "/dev/sda" ]]; then
-                echo "/dev/sda"
-                return 0
-            fi
-            if [[ -b "/dev/vda" ]]; then
-                echo "/dev/vda"
-                return 0
-            fi
-        fi
-        local ventoy_disk=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
-        if [[ -n "$ventoy_disk" ]]; then
-            log "INFO" "Detected Ventoy installation at $ventoy_disk - avoiding this disk"
-            local ventoy_parent=$(lsblk -no PKNAME "$ventoy_disk" | head -1)
-            [[ -n "$ventoy_parent" ]] && ventoy_parent="/dev/$ventoy_parent"
-        fi
-        local available_disks=($(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}'))
-        for disk in "${available_disks[@]}"; do
-            disk="/dev/$disk"
-            [[ "$disk" == "$ventoy_parent" ]] && continue
-            if [[ "$disk" =~ ^/dev/nvme ]]; then
-                echo "$disk"
-                return 0
-            fi
-        done
-        for disk in "${available_disks[@]}"; do
-            disk="/dev/$disk"
-            [[ "$disk" == "$ventoy_parent" ]] && continue
+    local available_disks=($(lsblk -dno NAME,TYPE,RM | awk '$2=="disk" && $3=="0" {print $1}'))
+    for disk in "${available_disks[@]}"; do
+        disk="/dev/$disk"
+        [[ "$disk" == "$ventoy_parent" ]] && continue
+        if [[ "$disk" =~ ^/dev/nvme ]]; then
             echo "$disk"
             return 0
-        done
-        return 1
-    }
-
-    get_partition_device() {
-        local disk="$1"
-        local part_num="$2"
-        if [[ "$disk" =~ ^/dev/nvme ]]; then
-            echo "${disk}p${part_num}"
-        else
-            echo "${disk}${part_num}"
         fi
-    }
-
-    DISK=$(detect_install_disk)
-    [[ -b "$DISK" ]] || { log "ERROR" "No suitable disk found"; lsblk; exit 1; }
-
-    # Create backup before making changes
-    create_backup
-
-    if [[ $INSTALL_MODE == "clean" ]]; then
-        log "WARNING" "Disk:"
-        lsblk -o NAME,SIZE,MODEL,TRAN,ROTA "$DISK"
-        confirm_with_timeout "ERASE $DISK? (y/n) "
-        check_system_requirements
-        if ((UEFI_MODE)); then
-            parted -s "$DISK" mklabel gpt
+    done
+    for disk in "${available_disks[@]}"; do
+        disk="/dev/$disk"
+        [[ "$disk" == "$ventoy_parent" ]] && continue
+        echo "$disk"
+        return 0
+    done
+    return 1
+}
+get_partition_device() {
+    local disk="$1"
+    local part_num="$2"
+    if [[ "$disk" =~ ^/dev/nvme ]]; then
+        echo "${disk}p${part_num}"
+    else
+        echo "${disk}${part_num}"
+    fi
+}
+DISK=$(detect_install_disk)
+[[ -b "$DISK" ]] || { echo "No suitable disk found"; lsblk; exit 1; }
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
+        -d|--disk) DISK="$2"; shift 2 ;;
+        -p|--password) PASSWORD="$2"; shift 2 ;;
+        -b|--browser) BROWSER="$2"; shift 2 ;;
+        *) echo "Usage: $0 [-d disk] [-m clean|dual] [-b edge|librewolf] -p password"; exit 1 ;;
+    esac
+done
+[[ -n $PASSWORD ]] || { echo "Password needed"; exit 1; }
+[[ $INSTALL_MODE =~ ^(clean|dual)$ ]] || { echo "Bad mode"; exit 1; }
+[[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Bad browser"; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "Need root"; exit 1; }
+if [[ $INSTALL_MODE == "clean" ]]; then
+    echo "WARNING: Disk:"
+    lsblk -o NAME,SIZE,MODEL,TRAN,ROTA "$DISK"
+    read -rp $"ERASE $DISK? (y/n) " a
+    [[ "$a" =~ ^[Yy]$ ]] || exit 1
+    if ((UEFI_MODE)); then
+        parted -s "$DISK" mklabel gpt
+        parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
+        parted -s "$DISK" mkpart primary ext4 513MiB 100%
+        BOOT_PART=$(get_partition_device "$DISK" "1")
+        ROOT_PART=$(get_partition_device "$DISK" "2")
+    else
+        parted -s "$DISK" mklabel msdos
+        parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
+        parted -s "$DISK" set 1 boot on
+        parted -s "$DISK" mkpart primary ext4 513MiB 100%
+        BOOT_PART=$(get_partition_device "$DISK" "1")
+        ROOT_PART=$(get_partition_device "$DISK" "2")
+    fi
+else
+    FORMAT_BOOT=0
+    if ((UEFI_MODE)); then
+        BOOT_PART=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
+        [[ -z "$BOOT_PART" ]] || { echo "Ventoy found"; exit 1; }
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
+        if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-            parted -s "$DISK" mkpart primary ext4 513MiB 100%
             BOOT_PART=$(get_partition_device "$DISK" "1")
-            ROOT_PART=$(get_partition_device "$DISK" "2")
-        else
-            parted -s "$DISK" mklabel msdos
-            parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
-            parted -s "$DISK" set 1 boot on
-            parted -s "$DISK" mkpart primary ext4 513MiB 100%
-            BOOT_PART=$(get_partition_device "$DISK" "1")
-            ROOT_PART=$(get_partition_device "$DISK" "2")
+            FORMAT_BOOT=1
         fi
     else
-        FORMAT_BOOT=0
-        if ((UEFI_MODE)); then
-            BOOT_PART=$(blkid -o device -t LABEL_FATBOOT=Ventoy 2>/dev/null || true)
-            [[ -z "$BOOT_PART" ]] || { log "ERROR" "Ventoy found"; exit 1; }
-            BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
-            if [[ -z "$BOOT_PART" ]]; then
-                parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
-                BOOT_PART=$(get_partition_device "$DISK" "1")
-                FORMAT_BOOT=1
-            fi
-        else
-            BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
-            if [[ -z "$BOOT_PART" ]]; then
-                parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
-                BOOT_PART=$(get_partition_device "$DISK" "1")
-                FORMAT_BOOT=1
-            fi
-        fi
-        FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {size=$3; gsub("MB","",$3); if($3 > max) max=$3} END {print max}')
-        [[ $FREE_SPACE -ge 10240 ]] || { log "ERROR" "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"; exit 1; }
-        LAST_PART_END=$(parted -s "$DISK" unit MB print | awk '/^ [0-9]+ / {end=$3} END {gsub("MB","",end); print end}')
-        START_POINT=$((LAST_PART_END + 1))
-        parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
-        PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
-        ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
-    fi
-
-    if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
-        if ((UEFI_MODE)); then
-            mkfs.fat -F32 "$BOOT_PART"
-        else
-            mkfs.ext4 -F "$BOOT_PART"
+        BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
+        if [[ -z "$BOOT_PART" ]]; then
+            parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
+            BOOT_PART=$(get_partition_device "$DISK" "1")
+            FORMAT_BOOT=1
         fi
     fi
-
-    mkfs.ext4 -F "$ROOT_PART"
-    mount "$ROOT_PART" /mnt
-    mkdir -p /mnt/boot/efi
-    mount "$BOOT_PART" /mnt/boot/efi
-    sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
-    pacman-key --init
-    pacman-key --populate archlinux
-    pacman -Sy --noconfirm archlinux-keyring
-    base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils tmux)
-    ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
-    [[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
-
-    # Verify packages before installation
-    verify_packages "${base_pkgs[@]}"
-
-    # Add checksum verification for downloaded packages
-    sed -i 's/^#CheckSpace/CheckSpace/;s/^#VerbosePkgLists/VerbosePkgLists/' /etc/pacman.conf
-
-    pacstrap /mnt "${base_pkgs[@]}"
-    genfstab -U /mnt >> /mnt/etc/fstab
-    arch-chroot /mnt /bin/bash <<CHROOT_EOF
+    FREE_SPACE=$(parted -s "$DISK" unit MB print free | awk '/Free Space/ {size=$3; gsub("MB","",$3); if($3 > max) max=$3} END {print max}')
+    [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MB)"; exit 1; }
+    LAST_PART_END=$(parted -s "$DISK" unit MB print | awk '/^ [0-9]+ / {end=$3} END {gsub("MB","",end); print end}')
+    START_POINT=$((LAST_PART_END + 1))
+    parted -s "$DISK" mkpart primary ext4 "${START_POINT}MB" 100%
+    PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
+    ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
+fi
+if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
+    if ((UEFI_MODE)); then
+        mkfs.fat -F32 "$BOOT_PART"
+    else
+        mkfs.ext4 -F "$BOOT_PART"
+    fi
+fi
+mkfs.ext4 -F "$ROOT_PART"
+mount "$ROOT_PART" /mnt
+mkdir -p /mnt/boot/efi
+mount "$BOOT_PART" /mnt/boot/efi
+sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy --noconfirm archlinux-keyring
+base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils tmux)
+((UEFI_MODE)) && base_pkgs+=(efibootmgr)
+[[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
+pacstrap /mnt "${base_pkgs[@]}"
+genfstab -U /mnt >> /mnt/etc/fstab
+arch-chroot /mnt /bin/bash <<CHROOT_EOF
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
@@ -539,28 +281,5 @@ systemctl --user enable --now pipewire{,-pulse} wireplumber
 USER_EOF
 rm -rf /tmp/paru-bin
 CHROOT_EOF
-
-    # Before unmounting, copy logs to installed system
-    finalize_logging() {
-        if [[ $DEBUG_MODE -eq 1 ]]; then
-            # Debug log is already in the right place
-            log "INFO" "Installation logs available at: $DEBUG_LOG"
-        else
-            # Copy regular log to installed system
-            mkdir -p "/mnt/var/log"
-            cp "$LOG_FILE" "/mnt/var/log/min-arch-install.log"
-            log "INFO" "Installation logs copied to: /var/log/min-arch-install.log"
-        fi
-    }
-
-    finalize_logging
-    umount -l -R /mnt
-    reboot
-}
-
-# Script entry point
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    trap 'error_log "Error on line $LINENO"' ERR
-    [[ $EUID -eq 0 ]] || { log "ERROR" "This script must be run as root"; exit 1; }
-    main "$@"
-fi
+umount -l -R /mnt
+reboot
