@@ -61,8 +61,54 @@ get_partition_device() {
         echo "${disk}${part_num}"
     fi
 }
+
+clean_existing_install() {
+    local disk="$1"
+    
+    # Check for existing EFI directory for Arch Linux
+    if ((UEFI_MODE)) && mount | grep -q "/mnt/boot/efi"; then
+        echo "Cleaning up existing GRUB EFI installation..."
+        if [[ -d /mnt/boot/efi/EFI/GRUB ]]; then
+            rm -rf /mnt/boot/efi/EFI/GRUB
+        fi
+    fi
+    
+    if [[ $INSTALL_MODE == "clean" ]]; then
+        return 0
+    fi
+    
+    local linux_parts=($(lsblk -no NAME,FSTYPE "$disk" | grep "ext4" | cut -d' ' -f1))
+    for part in "${linux_parts[@]}"; do
+        part="/dev/$part"
+        [[ "$part" == "$BOOT_PART" ]] && continue
+        
+        mkdir -p /tmp/arch_check
+        if mount "$part" /tmp/arch_check 2>/dev/null; then
+            if [[ -f /tmp/arch_check/etc/arch-release ]]; then
+                echo "Found existing Arch Linux installation on $part"
+                umount /tmp/arch_check
+                
+                read -rp $"Remove existing Arch Linux on $part? (y/n) " a
+                if [[ "$a" =~ ^[Yy]$ ]]; then
+                    echo "Removing existing Arch Linux partition $part"
+                    umount "$part" 2>/dev/null || true
+                    mkfs.ext4 -F "$part"
+                    ROOT_PART="$part"
+                    return 0
+                fi
+            fi
+            umount /tmp/arch_check
+        fi
+    done
+    
+    rmdir /tmp/arch_check 2>/dev/null || true
+    return 1
+}
+
 DISK=$(detect_install_disk)
 [[ -b "$DISK" ]] || { echo "No suitable disk found"; lsblk; exit 1; }
+[[ $INSTALL_MODE == "dual" ]] && clean_existing_install "$DISK"
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -179,15 +225,10 @@ DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
 if ((UEFI_MODE)); then
+    rm -rf /boot/efi/EFI/GRUB || true
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
-    # Make sure boot partition is marked as bootable
-    if [[ $INSTALL_MODE == "clean" ]]; then
-        parted -s "$DISK" set 1 boot on
-    fi
-    # Use the correct boot directory and be explicit about the device
-    grub-install --target=i386-pc --boot-directory=/boot "$DISK"
-    # Add these only if you're having console issues
+    grub-install --target=i386-pc --boot-directory=/boot --recheck "$DISK"
     echo 'GRUB_TERMINAL_INPUT="console"' >> /etc/default/grub
     echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
 fi
