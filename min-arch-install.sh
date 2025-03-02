@@ -94,50 +94,96 @@ detect_install_disk() {
 
 clean_existing_install() {
     local disk="$1"
-    log "Checking for existing installations on $disk"
+    log "Checking for existing Linux installations on $disk"
     
-    if ((UEFI_MODE)) && mount | grep -q "/mnt/boot/efi"; then
-        log "Cleaning existing EFI installation"
-        [[ -d /mnt/boot/efi/EFI/GRUB ]] && rm -rf /mnt/boot/efi/EFI/GRUB
+    # Improved filesystem detection using blkid
+    local linux_parts
+    mapfile -t linux_parts < <(blkid -t TYPE="ext4" -o device "$disk" | sort -u) || {
+        log "Failed to detect Linux partitions"
+        return 1
+    }
+    
+    if [[ ${#linux_parts[@]} -eq 0 ]]; then
+        log "No existing Linux partitions found on $disk"
+        return 0
     fi
-
-    [[ "$INSTALL_MODE" == "clean" ]] && return
-
-    local linux_parts=($(lsblk -no NAME,FSTYPE "$disk" | awk '/ext4/ {print $1}'))
+    
     for part in "${linux_parts[@]}"; do
-        part="/dev/${part}"
-        [[ "${part}" == "${BOOT_PART}" ]] && continue
-
+        local part_dev="/dev/${part}"
+        
+        # Skip EFI and Windows partitions with better detection
+        local fs_type
+        fs_type=$(blkid -s TYPE -o value "$part_dev" 2>/dev/null) || continue
+        if [[ "$fs_type" == "vfat" ]]; then
+            log "Skipping EFI/Windows partition: $part_dev ($fs_type)"
+            continue
+        fi
+        
         mkdir -p /tmp/arch_check
-        if mount "$part" /tmp/arch_check 2>/dev/null; then
+        if mount "$part_dev" /tmp/arch_check 2>/dev/null; then
             if [[ -f /tmp/arch_check/etc/arch-release ]]; then
-                log "Found Arch Linux on $part"
-                read -rp "Remove existing installation on $part? (y/N) " a
-                if [[ "$a" =~ [Yy] ]]; then
-                    log "Formatting $part"
-                    if ! umount "${part}" 2>/dev/null; then
-                        error_log "Failed to unmount ${part}"
+                log "Found existing Arch Linux installation on $part_dev"
+                umount /tmp/arch_check
+                
+                echo "Found existing Arch Linux installation on $part_dev"
+                read -rp "Remove this installation to reuse the space? (y/N) " confirm
+                if [[ "$confirm" =~ [Yy] ]]; then
+                    log "Preparing $part_dev for reuse"
+                    if ! wipefs -a "$part_dev" 2>/dev/null; then
+                        error_log "Failed to wipe filesystem on $part_dev"
+                        return 1
                     fi
-                    mkfs.ext4 -F "$part"
-                    ROOT_PART="$part"
+                    ROOT_PART="$part_dev"
+                    log "Successfully marked $part_dev for reuse"
                     return 0
                 fi
+            else
+                umount /tmp/arch_check
             fi
-            umount /tmp/arch_check
         fi
     done
+    
     rmdir /tmp/arch_check 2>/dev/null || true
+    log "No suitable Arch Linux partition found for reuse"
+    return 1
 }
 
 partition_disk() {
     local disk="$1"
-    local FORMAT_BOOT=0  # Add this line
-    log "Partitioning $disk in $INSTALL_MODE mode"
+    local FORMAT_BOOT=0
+    log "Starting disk partitioning in $INSTALL_MODE mode on $disk"
     
+    # If we're in dual-boot mode and haven't already found a partition to reuse
+    if [[ "$INSTALL_MODE" == "dual" && -z "$ROOT_PART" ]]; then
+        # Improved free space calculation
+        local FREE_SPACE
+        FREE_SPACE=$(parted -s "$disk" unit MiB print free | awk '
+            /Free Space/ {
+                gsub("MiB","",$3)
+                if (int($3) > max) max = int($3)
+            } 
+            END {print (max=="") ? 0 : max}
+        ')
+        
+        if [[ $FREE_SPACE -lt 10240 ]]; then
+            log "Insufficient free space: need 10GB+, found ${FREE_SPACE}MiB"
+            log "No existing Linux partition found to reuse"
+            exit 1
+        fi
+        log "Found sufficient free space: ${FREE_SPACE}MiB"
+    fi
+
+    # Add error checking for parted commands
     if [[ "$INSTALL_MODE" == "clean" ]]; then
         if ((UEFI_MODE)); then
-            parted -s "${disk}" mklabel gpt
-            parted -s "${disk}" mkpart ESP fat32 1MiB 513MiB
+            if ! parted -s "${disk}" mklabel gpt; then
+                error_log "Failed to create GPT partition table"
+                exit 1
+            fi
+            if ! parted -s "${disk}" mkpart ESP fat32 1MiB 513MiB; then
+                error_log "Failed to create ESP partition"
+                exit 1
+            fi
             parted -s "${disk}" set 1 esp on
             parted -s "${disk}" mkpart root ext4 513MiB 100%
             BOOT_PART=$(get_partition_device "$disk" 1)
@@ -239,7 +285,12 @@ configure_system() {
     echo "root:$PASSWORD" | chpasswd
     useradd -m -G wheel,video "$USERNAME"
     echo "$USERNAME:$PASSWORD" | chpasswd
-    echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+    
+    # Secure sudoers configuration
+    echo "%wheel ALL=(ALL) NOPASSWD: ALL" | visudo -cf - || {
+        error_log "Invalid sudoers configuration"
+        exit 1
+    }
     
     # Swap
     local swap_size=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 2 ))
@@ -428,6 +479,9 @@ SCRIPT_EOF
 
 # Main Execution Flow ----------------------------------------------------------
 main() {
+    # Improved logging with script command
+    exec script -a -q -c "bash $0 $*" "$LOG_FILE"
+    
     # Initialization
     exec 1> >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)
@@ -458,28 +512,45 @@ main() {
         [[ "$confirm" =~ [Yy] ]] || exit 1
     fi
 
-    # Partitioning
+    # Improved partitioning flow with better logging
+    if [[ "$INSTALL_MODE" == "dual" ]]; then
+        log "Checking for existing installations before partitioning"
+        clean_existing_install "$DISK" || log "No existing installation found, proceeding with free space"
+    fi
     partition_disk "$DISK"
-    clean_existing_install "$DISK"
     
-    # Formatting
+    # More robust formatting section
     if [[ "$INSTALL_MODE" == "clean" || "$FORMAT_BOOT" -eq 1 ]]; then
         if ((UEFI_MODE)); then
-            mkfs.fat -F32 "$BOOT_PART"
+            log "Formatting EFI boot partition: $BOOT_PART"
+            mkfs.fat -F32 "$BOOT_PART" || { error_log "Failed to format EFI partition"; exit 1; }
         else
-            mkfs.ext4 -F "$BOOT_PART"
+            log "Formatting BIOS boot partition: $BOOT_PART"
+            mkfs.ext4 -F "$BOOT_PART" || { error_log "Failed to format boot partition"; exit 1; }
         fi
     fi
-    mkfs.ext4 -F "$ROOT_PART"
     
-    # Mounting
-    mount "$ROOT_PART" /mnt || { error_log "Failed to mount root partition"; exit 1; }
+    log "Formatting root partition: $ROOT_PART"
+    mkfs.ext4 -F "$ROOT_PART" || { error_log "Failed to format root partition"; exit 1; }
+
+    # Enhanced mount error handling
+    if ! mount "$ROOT_PART" /mnt; then
+        error_log "Failed mounting $ROOT_PART to /mnt"
+        exit 1
+    fi
+    
     if ((UEFI_MODE)); then
         mkdir -p /mnt/boot/efi
-        mount "$BOOT_PART" /mnt/boot/efi || { error_log "Failed to mount EFI partition"; exit 1; }
+        if ! mount "$BOOT_PART" /mnt/boot/efi; then
+            error_log "Failed to mount EFI partition"
+            exit 1
+        fi
     else
         mkdir -p /mnt/boot
-        mount "$BOOT_PART" /mnt/boot || { error_log "Failed to mount boot partition"; exit 1; }
+        if ! mount "$BOOT_PART" /mnt/boot; then
+            error_log "Failed to mount boot partition"
+            exit 1
+        fi
     fi
 
     # System installation
@@ -492,13 +563,24 @@ main() {
     configure_system
     setup_user_environment
 
-    # Finalization with reboot confirmation
+    # Safe reboot procedure
+    log "Finalizing installation..."
+    sync
     if ((UEFI_MODE)); then
         umount -l /mnt/boot/efi || log "Warning: Failed to unmount EFI partition"
     fi
-    umount -l -R /mnt || { log "Error: Failed to unmount /mnt"; exit 1; }
-    log "Installation complete. Rebooting..."
-reboot
+    umount -l -R /mnt || {
+        log "Error: Failed to unmount /mnt"
+        exit 1
+    }
+    
+    log "Installation complete. Rebooting in 10 seconds..."
+    for i in {10..1}; do
+        echo -ne "\\rRebooting in $i seconds... (Ctrl+C to cancel)"
+        sleep 1
+    done
+    echo
+    reboot
 }
 
 # Execute
