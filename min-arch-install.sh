@@ -479,12 +479,10 @@ SCRIPT_EOF
 
 # Main Execution Flow ----------------------------------------------------------
 main() {
-    # Improved logging with script command
-    exec script -a -q -c "bash $0 $*" "$LOG_FILE"
-    
     # Initialization
     exec 1> >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)
+    
     [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
     DISK=$(detect_install_disk) || { log "No suitable disk found"; exit 1; }
     
