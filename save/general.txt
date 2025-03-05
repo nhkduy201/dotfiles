@@ -1,3 +1,4 @@
 timedatectl list-timezones
 sudo timedatectl set-timezone Your/Timezone
 dconf dump /desktop/ibus/
+fc-list --format='%{family[0]}\n' | sort -u
