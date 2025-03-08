@@ -5,6 +5,9 @@ Set WshShell = CreateObject("WScript.Shell")
 ' "cmd /c" runs the command, "0" hides the window, and "True" waits for it to finish.
 WshShell.Run "cmd /c net start w32time", 0, True
 
+' Set the time zone to SE Asia Standard Time (Hanoi, Bangkok, Jakarta)
+WshShell.Run "cmd /c tzutil /s ""SE Asia Standard Time""", 0, True
+
 ' Resync the system time.
 WshShell.Run "cmd /c w32tm.exe /resync", 0, True
 
