@@ -1,14 +1,8 @@
-' Create a WScript.Shell object
-Set WshShell = CreateObject("WScript.Shell")
+Set ws = CreateObject("WScript.Shell")
+ws.Run "net start w32time", 0, True
+ws.Run "tzutil /s ""SE Asia Standard Time""", 0, True
+ws.Run "w32tm /resync", 0, True
 
-' Start the Windows Time service if it's not running.
-' "cmd /c" runs the command, "0" hides the window, and "True" waits for it to finish.
-WshShell.Run "cmd /c net start w32time", 0, True
-
-' Resync the system time.
-WshShell.Run "cmd /c w32tm.exe /resync", 0, True
-
-' Launch Microsoft Edge.
-' If msedge.exe isn’t in your PATH, specify the full path, e.g.,
-' "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-WshShell.Run "msedge", 0, False
+If GetObject("winmgmts:").ExecQuery("Select * from Win32_Process Where Name='msedge.exe'").Count = 0 Then 
+    ws.Run "msedge", 0, False
+End If
