@@ -156,6 +156,7 @@ else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
             parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
+            parted -s "$DISK" set 1 boot on  # Add boot flag for BIOS boot partition
             BOOT_PART=$(get_partition_device "$DISK" "1")
             FORMAT_BOOT=1
         fi
