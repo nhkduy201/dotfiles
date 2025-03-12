@@ -64,24 +64,19 @@ get_partition_device() {
 
 clean_existing_install() {
     local disk="$1"
-    
-    # Check for existing EFI directory for Arch Linux
     if ((UEFI_MODE)) && mount | grep -q "/mnt/boot/efi"; then
         echo "Cleaning up existing GRUB EFI installation..."
         if [[ -d /mnt/boot/efi/EFI/GRUB ]]; then
             rm -rf /mnt/boot/efi/EFI/GRUB
         fi
     fi
-    
     if [[ $INSTALL_MODE == "clean" ]]; then
         return 0
     fi
-    
     local linux_parts=($(lsblk -no NAME,FSTYPE "$disk" | grep "ext4" | cut -d' ' -f1))
     for part in "${linux_parts[@]}"; do
         part="/dev/$part"
         [[ "$part" == "$BOOT_PART" ]] && continue
-        
         mkdir -p /tmp/arch_check
         if mount "$part" /tmp/arch_check 2>/dev/null; then
             if [[ -f /tmp/arch_check/etc/arch-release ]]; then
@@ -100,11 +95,9 @@ clean_existing_install() {
             umount /tmp/arch_check
         fi
     done
-    
     rmdir /tmp/arch_check 2>/dev/null || true
     return 1
 }
-
 DISK=$(detect_install_disk)
 [[ -b "$DISK" ]] || { echo "No suitable disk found"; lsblk; exit 1; }
 [[ $INSTALL_MODE == "dual" ]] && clean_existing_install "$DISK"
@@ -161,8 +154,6 @@ else
             FORMAT_BOOT=1
         fi
     fi
-
-    # Improved free space detection that handles decimal values
     FREE_SPACE=$(parted -s "$DISK" unit MiB print free | awk '
         /Free Space/ {
             gsub("MiB","",$3)
@@ -170,11 +161,8 @@ else
         } 
         END {print max}
     ')
-    
     [[ -z "$FREE_SPACE" ]] && FREE_SPACE=0
     [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MiB)"; exit 1; }
-
-    # Find last partition end point more reliably
     LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '
         /^ [0-9]+ / {
             gsub("MiB","",$3)
@@ -187,7 +175,6 @@ else
     PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
     ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
 fi
-
 if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
     if ((UEFI_MODE)); then
         mkfs.fat -F32 "$BOOT_PART"
@@ -195,10 +182,8 @@ if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
         mkfs.ext4 -F "$BOOT_PART"
     fi
 fi
-
 mkfs.ext4 -F "$ROOT_PART"
 mount "$ROOT_PART" /mnt
-
 if ((UEFI_MODE)); then
     mkdir -p /mnt/boot/efi
     mount "$BOOT_PART" /mnt/boot/efi
@@ -206,7 +191,6 @@ else
     mkdir -p /mnt/boot
     mount "$BOOT_PART" /mnt/boot
 fi
-
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
@@ -244,7 +228,10 @@ FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
 mkinitcpio -P
-if ((UEFI_MODE)); then
+mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
+UEFI_CHROOT=0
+[[ -d /sys/firmware/efi/efivars ]] && UEFI_CHROOT=1
+if ((UEFI_CHROOT)); then
     rm -rf /boot/efi/EFI/GRUB || true
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
