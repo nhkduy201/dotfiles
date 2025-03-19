@@ -55,6 +55,21 @@ sudo virt-install \
   --machine q35 \
   --console pty,target_type=serial
 
+curl -L -o /var/lib/libvirt/images/agama-installer-Leap.x86_64-Leap.iso \
+https://mirrors.nju.edu.cn/opensuse/distribution/leap/16.0/installer/iso/agama-installer-Leap.x86_64-Leap.iso
+
+sudo virt-install \
+  --name leap16.0 \
+  --memory 2048 \
+  --vcpus 2 \
+  --disk size=20 \
+  --cdrom /var/lib/libvirt/images/agama-installer-Leap.x86_64-Leap.iso \
+  --os-variant opensuse15.6 \
+  --network network=default \
+  --graphics vnc \
+  --boot menu=on \
+  --noautoconsole
+
 sudo virsh list --all
 sudo virsh shutdown archlinux
 sudo virsh destroy archlinux
