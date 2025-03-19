@@ -348,7 +348,7 @@ bind -x '"\C-r": reverse_search_dmenu'
 export HISTCONTROL=ignoreboth
 export EDITOR=vim
 pgrep -x "Xorg" > /dev/null || startx
-[[ \\\$TERM_PROGRAM != "vscode" ]] && [[ -z \\\$TMUX ]] && { tmux attach || tmux; }
+[[ \\\$TERM_PROGRAM = "vscode" ]] && [[ -z \\\$TMUX ]] && { tmux attach || tmux; }
 BASHRC_EOF
 systemctl --user enable --now pipewire{,-pulse} wireplumber
 USER_EOF
