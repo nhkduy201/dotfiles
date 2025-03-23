@@ -1,2 +1,21 @@
-git clone https://gitlab.archlinux.org/archlinux/packaging/packages/linux.git
-pkgctl repo clone --protocol=https linux
+### Ways to Download Package Source Code in Arch Linux:
+
+1. **Official packages:**
+   - `asp checkout <package>` - Arch Source Package tool
+   - `pkgctl repo clone --protocol=https <package>` - Package Control tool
+   - `git clone https://gitlab.archlinux.org/archlinux/packaging/packages/<package>.git`
+
+2. **AUR packages:**
+   - `paru -G <package>` - Using paru AUR helper
+   - `yay -G <package>` - Using yay AUR helper
+   - `git clone https://aur.archlinux.org/<package>.git`
+   - Direct download: `curl -s 'https://aur.archlinux.org/cgit/aur.git/snapshot/<package>.tar.gz'`
+
+3. **For either type:**
+   - After download: `cd <package> && makepkg --verifysource` - Downloads source without checking dependencies
+   - View PKGBUILD: `curl -s https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=<package>`
+
+The script handles both official and AUR packages, with options to:
+- Just download source code (`-s/--source-only`)
+- Set up a Docker container for building with dependencies (`-b/--build`)
+- Search for packages with dmenu/fzf selection

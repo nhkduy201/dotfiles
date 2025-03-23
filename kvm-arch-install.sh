@@ -8,7 +8,7 @@ if ! sudo virsh net-info default 2>/dev/null | grep -q "Active:.*yes"; then sudo
 rm -f ~/.ssh/known_hosts
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
-if [ ! -f archlinux*-x86_64.iso ]; then if [ -f download_arch_iso.sh ]; then ./download_arch_iso.sh; else curl -LO https://geo.mirror.pkgbuild.com/iso/latest/archlinux-x86_64.iso; fi; fi
+if [ ! -f /var/lib/libvirt/images/archlinux*-x86_64.iso ]; then if [ -f download_arch_iso.sh ]; then ./download_arch_iso.sh; else curl -LO https://geo.mirror.pkgbuild.com/iso/latest/archlinux-x86_64.iso; fi; fi
 ISO_PATH=$(realpath $(ls -1 archlinux*-x86_64.iso 2>/dev/null | head -n1))
 [ -z "$ISO_PATH" ] && { echo "ERROR: No ISO found"; exit 1; }
 ISO_FILE=$(basename "$ISO_PATH")
