@@ -184,6 +184,42 @@ if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
 fi
 mkfs.ext4 -F "$ROOT_PART"
 mount "$ROOT_PART" /mnt
+
+mkdir -p /mnt/usr/local/bin /mnt/etc/udev/rules.d /mnt/etc/X11/xorg.conf.d
+
+cat > /mnt/usr/local/bin/touchpad-toggle << 'EOF'
+#!/bin/bash
+TOUCHPAD_ID=$(xinput | grep -i touchpad | grep -o 'id=[0-9]*' | awk -F= '{print $2}')
+case "$1" in
+    enable)
+        xinput enable $TOUCHPAD_ID
+        ;;
+    disable)
+        xinput disable $TOUCHPAD_ID
+        ;;
+    *)
+        echo "Usage: $0 {enable|disable}"
+        exit 1
+        ;;
+esac
+EOF
+chmod +x /mnt/usr/local/bin/touchpad-toggle
+
+cat > /mnt/etc/udev/rules.d/01-touchpad.rules << EOF
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/$USERNAME/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle disable"
+ACTION=="remove", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/$USERNAME/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle enable"
+EOF
+
+cat > /mnt/etc/X11/xorg.conf.d/01-libinput.conf << 'EOF'
+Section "InputClass"
+    Identifier "libinput touchpad catchall"
+    MatchIsTouchpad "on"
+    Driver "libinput"
+    Option "Tapping" "on"
+    Option "NaturalScrolling" "true"
+EndSection
+EOF
+
 if ((UEFI_MODE)); then
     mkdir -p /mnt/boot/efi
     mount "$BOOT_PART" /mnt/boot/efi
@@ -294,7 +330,7 @@ export QT_IM_MODULE=ibus
 ibus-daemon -drx &
 gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'Bamboo']"
 gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']"
-sudo python \\$HOME/l5p-kbl/l5p_kbl.py static a020f0
+sudo python \\\$HOME/l5p-kbl/l5p_kbl.py static a020f0
 exec i3
 XINIT_EOF
 cat > ~/.gitconfig <<'GITCFG_EOF'
