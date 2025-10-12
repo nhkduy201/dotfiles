@@ -227,6 +227,15 @@ else
     mkdir -p /mnt/boot
     mount "$BOOT_PART" /mnt/boot
 fi
+mkdir -p /etc/systemd/resolved.conf.d
+cat > /etc/systemd/resolved.conf.d/dns.conf << 'EOF'
+[Resolve]
+DNS=8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844
+FallbackDNS=1.1.1.1 1.0.0.1
+DNSOverTLS=yes
+EOF
+systemctl restart systemd-resolved
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
