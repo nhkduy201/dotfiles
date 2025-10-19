@@ -11,7 +11,6 @@ INSTALL_MODE="clean"
 BROWSER="edge"
 UEFI_MODE=0
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_MODE=1
-
 detect_install_disk() {
     local is_vm=0
     local vm_hint=""
@@ -53,7 +52,6 @@ detect_install_disk() {
     done
     return 1
 }
-
 get_partition_device() {
     local disk="$1"
     local part_num="$2"
@@ -63,7 +61,6 @@ get_partition_device() {
         echo "${disk}${part_num}"
     fi
 }
-
 clean_existing_install() {
     local disk="$1"
     if ((UEFI_MODE)) && mount | grep -q "/mnt/boot/efi"; then
@@ -99,11 +96,9 @@ clean_existing_install() {
     rmdir /tmp/arch_check 2>/dev/null || true
     return 1
 }
-
 DISK=$(detect_install_disk)
 [[ -b "$DISK" ]] || { echo "No suitable disk found"; lsblk; exit 1; }
 [[ $INSTALL_MODE == "dual" ]] && clean_existing_install "$DISK"
-
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode) INSTALL_MODE="$2"; shift 2 ;;
@@ -113,12 +108,10 @@ while [[ $# -gt 0 ]]; do
         *) echo "Usage: $0 [-d disk] [-m clean|dual|vbmin] [-b edge|librewolf] -p password"; exit 1 ;;
     esac
 done
-
 [[ -n $PASSWORD ]] || { echo "Password needed"; exit 1; }
 [[ $INSTALL_MODE =~ ^(clean|dual|vbmin)$ ]] || { echo "Bad mode"; exit 1; }
 [[ $BROWSER =~ ^(edge|librewolf)$ ]] || { echo "Bad browser"; exit 1; }
 [[ $EUID -eq 0 ]] || { echo "Need root"; exit 1; }
-
 if [[ $INSTALL_MODE == "clean" ]]; then
     echo "WARNING: Disk:"
     lsblk -o NAME,SIZE,MODEL,TRAN,ROTA "$DISK"
@@ -145,6 +138,7 @@ else
         [[ -z "$BOOT_PART" ]] || { echo "Ventoy found"; exit 1; }
         BOOT_PART=$(fdisk -l "$DISK" | awk '/EFI System/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
+            parted -s "$DISK" mklabel gpt
             parted -s "$DISK" mkpart primary fat32 1MiB 513MiB set 1 esp on
             BOOT_PART=$(get_partition_device "$DISK" "1")
             FORMAT_BOOT=1
@@ -152,34 +146,22 @@ else
     else
         BOOT_PART=$(fdisk -l "$DISK" | awk '/Linux/ {print $1}' | head -1)
         if [[ -z "$BOOT_PART" ]]; then
+            parted -s "$DISK" mklabel msdos
             parted -s "$DISK" mkpart primary ext4 1MiB 513MiB
             parted -s "$DISK" set 1 boot on
             BOOT_PART=$(get_partition_device "$DISK" "1")
             FORMAT_BOOT=1
         fi
     fi
-    FREE_SPACE=$(parted -s "$DISK" unit MiB print free | awk '
-        /Free Space/ {
-            gsub("MiB","",$3)
-            if (int($3) > max) max = int($3)
-        } 
-        END {print max}
-    ')
+    FREE_SPACE=$(parted -s "$DISK" unit MiB print free | awk '/Free Space/ {gsub("MiB","",$3); if (int($3) > max) max = int($3)} END {print max}')
     [[ -z "$FREE_SPACE" ]] && FREE_SPACE=0
     [[ $FREE_SPACE -ge 10240 ]] || { echo "Need 10GB+ of free space (only found ${FREE_SPACE}MiB)"; exit 1; }
-    LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '
-        /^ [0-9]+ / {
-            gsub("MiB","",$3)
-            if (int($3) > end) end = int($3)
-        } 
-        END {print end}
-    ')
+    LAST_PART_END=$(parted -s "$DISK" unit MiB print | awk '/^ [0-9]+ / {gsub("MiB","",$3); if (int($3) > end) end = int($3)} END {print end}')
     START_POINT=$((LAST_PART_END + 1))
     parted -s "$DISK" mkpart primary ext4 "${START_POINT}MiB" 100%
     PART_NUM=$(parted -s "$DISK" print | awk '/^ [0-9]+ / {n=$1} END {print n}')
     ROOT_PART=$(get_partition_device "$DISK" "$PART_NUM")
 fi
-
 if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
     if ((UEFI_MODE)); then
         mkfs.fat -F32 "$BOOT_PART"
@@ -187,13 +169,10 @@ if [[ $INSTALL_MODE == "clean" ]] || [[ $FORMAT_BOOT -eq 1 ]]; then
         mkfs.ext4 -F "$BOOT_PART"
     fi
 fi
-
 mkfs.ext4 -F "$ROOT_PART"
 mount "$ROOT_PART" /mnt
-
 if [[ $INSTALL_MODE != "vbmin" ]]; then
     mkdir -p /mnt/usr/local/bin /mnt/etc/udev/rules.d /mnt/etc/X11/xorg.conf.d
-    
     cat > /mnt/usr/local/bin/touchpad-toggle << 'EOF'
 #!/bin/bash
 TOUCHPAD_ID=$(xinput | grep -i touchpad | grep -o 'id=[0-9]*' | awk -F= '{print $2}')
@@ -211,12 +190,10 @@ case "$1" in
 esac
 EOF
     chmod +x /mnt/usr/local/bin/touchpad-toggle
-
     cat > /mnt/etc/udev/rules.d/01-touchpad.rules << EOF
 ACTION=="add", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/$USERNAME/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle disable"
 ACTION=="remove", SUBSYSTEM=="input", KERNEL=="mouse[0-9]*", ENV{DISPLAY}=":0", ENV{XAUTHORITY}="/home/$USERNAME/.Xauthority", RUN+="/usr/local/bin/touchpad-toggle enable"
 EOF
-
     cat > /mnt/etc/X11/xorg.conf.d/01-libinput.conf << 'EOF'
 Section "InputClass"
     Identifier "libinput touchpad catchall"
@@ -227,7 +204,6 @@ Section "InputClass"
 EndSection
 EOF
 fi
-
 if ((UEFI_MODE)); then
     mkdir -p /mnt/boot/efi
     mount "$BOOT_PART" /mnt/boot/efi
@@ -235,7 +211,6 @@ else
     mkdir -p /mnt/boot
     mount "$BOOT_PART" /mnt/boot
 fi
-
 mkdir -p /etc/systemd/resolved.conf.d
 cat > /etc/systemd/resolved.conf.d/dns.conf << 'EOF'
 [Resolve]
@@ -245,24 +220,19 @@ DNSOverTLS=yes
 EOF
 systemctl restart systemd-resolved
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm archlinux-keyring
-
 if [[ $INSTALL_MODE == "vbmin" ]]; then
     base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel openssh vim tmux wget)
 else
     base_pkgs=(base linux linux-firmware networkmanager sudo grub efibootmgr amd-ucode intel-ucode git base-devel fuse2 pipewire{,-pulse,-alsa,-jack} wireplumber alsa-utils xorg{,-xinit} i3{-wm,status,blocks} dmenu picom feh ibus gvim xclip mpv scrot slock python-pyusb brightnessctl jq wget openssh xdg-utils tmux adobe-source-code-pro-fonts pavucontrol)
 fi
-
 ((UEFI_MODE)) && base_pkgs+=(efibootmgr)
 [[ "$INSTALL_MODE" == "dual" ]] && base_pkgs+=(os-prober)
-
 pacstrap /mnt "${base_pkgs[@]}"
 genfstab -U /mnt >> /mnt/etc/fstab
-
 arch-chroot /mnt /bin/bash <<CHROOT_EOF
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
@@ -277,33 +247,27 @@ echo "root:$PASSWORD" | chpasswd
 useradd -m -G wheel,video "$USERNAME"
 echo "$USERNAME:$PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
 SWAP_SIZE=\$(((\$(grep MemTotal /proc/meminfo | awk '{print \$2}') / 1024 / 2)))
 fallocate -l \${SWAP_SIZE}M /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
 echo "/swapfile none swap defaults 0 0" >> /etc/fstab
-
 if [[ "$INSTALL_MODE" == "vbmin" ]]; then
     systemctl enable systemd-resolved NetworkManager sshd
 else
     systemctl enable systemd-resolved NetworkManager
 fi
-
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 echo "[Resolve]
 DNS=8.8.8.8 8.8.4.4
 FallbackDNS=1.1.1.1 1.0.0.1
 DNSOverTLS=yes
 DNSSEC=yes" > /etc/systemd/resolved.conf
-
 mkinitcpio -P
-
 mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
 UEFI_CHROOT=0
 [[ -d /sys/firmware/efi/efivars ]] && UEFI_CHROOT=1
-
 if ((UEFI_CHROOT)); then
     rm -rf /boot/efi/EFI/GRUB || true
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
@@ -312,11 +276,9 @@ else
     echo 'GRUB_TERMINAL_INPUT="console"' >> /etc/default/grub
     echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
 fi
-
 [[ "$INSTALL_MODE" == "dual" ]] && echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
 sed -i 's/GRUB_TIMEOUT=5/GRUB_TIMEOUT=1/' /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
-
 if [[ "$INSTALL_MODE" != "vbmin" ]]; then
     mkdir -p /etc/X11/xorg.conf.d
     cat > /etc/X11/xorg.conf.d/30-touchpad.conf <<'XORG_EOF'
@@ -328,23 +290,16 @@ Section "InputClass"
     Option "NaturalScrolling" "true"
 EndSection
 XORG_EOF
-
     mkdir -p /etc/sudoers.d
     echo "$USERNAME ALL=(ALL) NOPASSWD:/usr/bin/python /home/$USERNAME/l5p-kbl/l5p_kbl.py" > /etc/sudoers.d/l5p-kbl
     chmod 440 /etc/sudoers.d/l5p-kbl
 fi
-
-# Install paru for both modes - useful in vbmin too
 sudo -u $USERNAME bash <<USER_EOF
 cd ~
 git clone https://aur.archlinux.org/paru-bin.git
-cd paru-bin
-makepkg -si --noconfirm
-cd ..
-
+makepkg -D paru-bin/ -si --noconfirm
 if [[ "$INSTALL_MODE" != "vbmin" ]]; then
     [[ "$BROWSER" == "edge" ]] && paru -S --noconfirm ibus-bamboo microsoft-edge-stable-bin || paru -S --noconfirm ibus-bamboo librewolf-bin
-    
     paru -Gq st
     cd st
     sed -i "s#^source=(.*#&\\n        st-clipboard-20180309-c5ba9c0.diff#" PKGBUILD
@@ -356,10 +311,8 @@ if [[ "$INSTALL_MODE" != "vbmin" ]]; then
   sed -i "s/\\\\\\\\(static char \\\\\\\\*font = \\\\\\\"\\\\\\\\)[^:]\\\\\\\\+:[^:]\\\\\\\\+/\\\\\\\\1Source Code Pro:pixelsize=16/" "\\\$_sourcedir/config.def.h"' PKGBUILD
     makepkg -si --noconfirm --skipinteg
     cd ..
-    
     git clone https://github.com/imShara/l5p-kbl
     sed -i 's/PRODUCT = 0xC965/PRODUCT = 0xC975/' l5p-kbl/l5p_kbl.py
-    
     mkdir -p ~/.config/i3
     cp /etc/i3/config ~/.config/i3/config
     sed -i '1i set \\\$mod Mod4
@@ -374,7 +327,6 @@ bindsym \\\$mod+Shift+s exec --no-startup-id "scrot -s - | xclip -sel clip -t im
 bindsym \\\$mod+q kill
 bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl set +5%
 bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-' >> ~/.config/i3/config
-    
     cat > ~/.xinitrc <<'XINIT_EOF'
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
@@ -385,10 +337,8 @@ gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>sp
 sudo python \\\$HOME/l5p-kbl/l5p_kbl.py static a020f0
 exec i3
 XINIT_EOF
-
     systemctl --user enable --now pipewire{,-pulse} wireplumber
 fi
-
 cat > ~/.gitconfig <<'GITCFG_EOF'
 [user]
     name = nhkduy201
@@ -403,13 +353,11 @@ cat > ~/.gitconfig <<'GITCFG_EOF'
 [diff]
     tool = vim
 GITCFG_EOF
-
 cat > ~/.vimrc <<'VIM_EOF'
 set hls tabstop=2 shiftwidth=2 expandtab autoindent smartindent cindent clipboard=unnamedplus mouse=
 let mapleader = ","
 syntax on
 VIM_EOF
-
 cat > ~/.tmux.conf <<'TMUX_EOF'
 setw -g mode-keys vi
 bind h select-pane -L
@@ -433,7 +381,6 @@ bind-key -T copy-mode-vi 'v' send -X begin-selection
 bind-key -T copy-mode-vi 'y' send -X copy-pipe "xclip -sel clip -i"
 bind-key C-m set-option -g mouse \; display-message 'mouse #{?mouse,on,off}'
 TMUX_EOF
-
 cat >> ~/.bashrc <<'BASHRC_EOF'
 reverse_search_dmenu() {
     local r=\\\$(HISTTIMEFORMAT= history | sed 's/^ *[0-9]* *//' | grep -F -- "\\\$READLINE_LINE" | tac | awk '!a[\\\$0]++' | dmenu -l 10 -p "History> ")
@@ -445,10 +392,8 @@ export EDITOR=vim
 [[ "$INSTALL_MODE" != "vbmin" ]] && { pgrep -x "Xorg" > /dev/null || startx; }
 #[[ \\\$TERM_PROGRAM != "vscode" ]] && [[ -z \\\$TMUX ]] && { tmux attach || tmux; }
 BASHRC_EOF
-
 rm -rf /tmp/paru-bin
 USER_EOF
 CHROOT_EOF
-
 umount -l -R /mnt
 reboot
