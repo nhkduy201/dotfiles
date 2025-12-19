@@ -2,7 +2,7 @@
 CACHYOS HANDHELD: DNS & VIETNAMESE TELEX (FCITX5)
 ============================================================
 
-1. GLOBAL DNS (STABLE & PRIVATE)
+1. GLOBAL DNS (DNS-OVER-TLS)
 ------------------------------------------------------------
 sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 sudo mkdir -p /etc/systemd/resolved.conf.d
@@ -11,21 +11,27 @@ sudo systemctl restart systemd-resolved
 
 2. VIETNAMESE INPUT (FCITX5-BAMBOO)
 ------------------------------------------------------------
-# A. Install & Clean: (Do NOT set GTK/QT_IM_MODULE env vars)
+# A. Install & Clean
 sudo pacman -Rns ibus-bamboo ibus --noconfirm
 sudo pacman -S --needed fcitx5 fcitx5-bamboo fcitx5-qt fcitx5-gtk fcitx5-configtool
 
-# B. System Activation:
+# B. System Activation
 # 1. Settings -> Keyboard -> Virtual Keyboard -> Select 'Fcitx 5' -> Apply.
-# 2. Log out and log back in.
+# 2. Log out and back in. (Do NOT set manual IM_MODULE env vars)
 
-# C. GUI Configuration (After restart):
-# 1. Run 'fcitx5-configtool'
-# 2. Click '+ Add Input Method' (Bottom Right).
-# 3. Uncheck 'Only Show Current Language' -> Search 'Bamboo' -> Add.
-# 4. Click the 'Configure' (Wrench) icon next to Bamboo.
-# 5. Set 'Input Method' to 'Telex'.
+# C. Bamboo Config (Run 'fcitx5-configtool')
+# 1. Add 'Bamboo' (Uncheck 'Only Show Current Language' to find).
+# 2. Click Wrench (Configure) icon next to Bamboo.
+# 3. REQUIRED SETTINGS:
+#    - Input Method: Telex
+#    - Output Charset: Unicode (CRITICAL)
+#    - Underline the preedit text: OFF (Uncheck to remove underline)
 
-# D. Usage:
+# D. Usage
 # - Toggle: Ctrl + Space
+
+3. SYSTEM TIPS
+------------------------------------------------------------
+# KDE Wallet Popups: Select 'Classic Blowfish', click Next,
+# leave the password BLANK to stop future prompts.
 ============================================================
