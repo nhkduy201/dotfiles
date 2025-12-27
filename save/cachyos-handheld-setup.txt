@@ -1,37 +1,36 @@
 ============================================================
-CACHYOS HANDHELD: DNS & VIETNAMESE TELEX (FCITX5)
+CACHYOS HANDHELD: SYSTEM SETUP GUIDE
 ============================================================
 
-1. GLOBAL DNS (DNS-OVER-TLS)
+1. GLOBAL DNS (STABLE & PRIVATE)
 ------------------------------------------------------------
+# Sets up the systemd-resolved stub and enables encrypted DNS
 sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 sudo mkdir -p /etc/systemd/resolved.conf.d
 echo -e "[Resolve]\nDNS=1.1.1.1 8.8.8.8\nDNSOverTLS=yes\nDomains=~." | sudo tee /etc/systemd/resolved.conf.d/dns.conf
 sudo systemctl restart systemd-resolved
 
-2. VIETNAMESE INPUT (FCITX5-BAMBOO)
+2. VIETNAMESE TELEX (FCITX5)
 ------------------------------------------------------------
 # A. Install & Clean
-sudo pacman -Rns ibus-bamboo ibus --noconfirm
+# Removes IBus to avoid conflicts and installs Fcitx5-Bamboo
+sudo pacman -Rns ibus-bamboo ibus --noconfirm 2>/dev/null || true
 sudo pacman -S --needed fcitx5 fcitx5-bamboo fcitx5-qt fcitx5-gtk fcitx5-configtool
 
-# B. System Activation
+# B. Activate
 # 1. Settings -> Keyboard -> Virtual Keyboard -> Select 'Fcitx 5' -> Apply.
-# 2. Log out and back in. (Do NOT set manual IM_MODULE env vars)
+# 2. Log out and log back in (Do NOT set manual IM_MODULE env vars).
 
-# C. Bamboo Config (Run 'fcitx5-configtool')
+# C. Bamboo Settings (Run 'fcitx5-configtool')
 # 1. Add 'Bamboo' (Uncheck 'Only Show Current Language' to find).
-# 2. Click Wrench (Configure) icon next to Bamboo.
-# 3. REQUIRED SETTINGS:
+# 2. Click Wrench (Configure) -> Set these EXACTLY:
 #    - Input Method: Telex
-#    - Output Charset: Unicode (CRITICAL)
+#    - Output Charset: Unicode (Required for modern apps)
 #    - Underline the preedit text: OFF (Uncheck to remove underline)
 
-# D. Usage
-# - Toggle: Ctrl + Space
-
-3. SYSTEM TIPS
+3. SYSTEM & BLUETOOTH FIXES
 ------------------------------------------------------------
-# KDE Wallet Popups: Select 'Classic Blowfish', click Next,
-# leave the password BLANK to stop future prompts.
+# KDE Wallet: Use 'Classic Blowfish' + BLANK password to stop popups.
+# Bluetooth: If GUI fails, pair manually via terminal:
+# bluetoothctl -> power on -> agent on -> default-agent -> scan on -> pair <MAC>
 ============================================================
