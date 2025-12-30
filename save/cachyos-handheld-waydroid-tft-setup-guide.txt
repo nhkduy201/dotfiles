@@ -1,0 +1,68 @@
+============================================================
+CACHYOS HANDHELD: WAYDROID & TFT SETUP GUIDE
+============================================================
+
+1. CORE INSTALLATION & SERVICE
+------------------------------------------------------------
+# Install Waydroid and initialize with Google Play Services
+sudo pacman -S waydroid --noconfirm
+sudo waydroid init -s GAPPS -f
+sudo systemctl enable --now waydroid-container
+
+2. ARM TRANSLATION (FOR TFT PERFORMANCE)
+------------------------------------------------------------
+# TFT is ARM-based; libndk is required for x86 CPUs (AMD/Intel)
+git clone https://github.com/casualsnek/waydroid_script.git
+cd waydroid_script
+python3 -m venv venv
+source venv/bin/activate
+# or 'source venv/bin/activate.fish' if use fish
+pip install -r requirements.txt
+sudo ./venv/bin/python3 main.py install libndk
+deactivate && cd ..
+
+3. GOOGLE PLAY STORE FIX (ANDROID ID)
+------------------------------------------------------------
+# A. Start Waydroid once to generate the ID
+waydroid session start &
+# or through the start menu
+
+# B. Get the Android ID (Run this after Waydroid has loaded)
+# This uses sqlite3 to bypass the "Binary file matches" error
+sudo waydroid shell -- sh -c "sqlite3 /data/data/com.google.android.gsf/databases/gservices.db 'select value from main where name = \"android_id\";'"
+
+# C. Register: Copy the output number and paste it here:
+# https://www.google.com/android/uncertified/
+# NOTE: Wait ~20 mins for Google to whitelist the ID.
+
+4. TFT OPTIMIZATION (PC UI & FPS)
+------------------------------------------------------------
+# A. Force Tablet/PC UI Layout (Run while Waydroid is active)
+waydroid shell wm size 1920x1085 # (why not 1920x1080 ???)
+
+# B. Unlock FPS (Run AFTER installing TFT and opening it once)
+# Path(example): ~/.local/share/waydroid/data/data/com.riotgames.league.teamfighttactics/no_backup/Config/Game.cfg
+# Command(correct): sudo waydroid shell -- vim /data_mirror/data_ce/null/0/com.riotgames.league.teamfighttacticsvn/no_backup/Config/Game.cfg
+# Set: WaitForVerticalSync=1 | FrameCapType=0
+
+5. STEAM GAME MODE INTEGRATION
+------------------------------------------------------------
+# 1. Add "Waydroid" as a Non-Steam Game in Desktop Mode.
+In CachyOS Handheld, just right click the icon in start menu
+and choose 'Add to Steam'.
+# 2. Launch Options: show-full-ui
+# 3. Controller: Use "Web Browser" template (Mouse/Touch support).
+
+6. COMPLETELY REVERT / CLEANUP
+------------------------------------------------------------
+# Stop services and remove packages
+sudo systemctl disable --now waydroid-container
+sudo pacman -Rns waydroid --noconfirm
+
+# Wipe all Android data and leftover configs
+sudo rm -rf /var/lib/waydroid
+rm -rf ~/.local/share/waydroid
+rm -rf ~/.share/waydroid
+rm -rf ~/.local/share/applications/*waydroid*
+rm -rf ~/waydroid_script
+============================================================
