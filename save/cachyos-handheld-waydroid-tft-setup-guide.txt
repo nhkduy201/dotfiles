@@ -1,59 +1,70 @@
 ============================================================
-CACHYOS HANDHELD: WAYDROID & TFT SETUP GUIDE
+CACHYOS HANDHELD: WAYDROID & TFT OPTIMIZATION GUIDE
 ============================================================
 
-1. CORE INSTALLATION & SERVICE
+1. CORE WAYDROID INSTALLATION & SERVICE
 ------------------------------------------------------------
-# Install Waydroid and initialize with Google Play Services
+# Install, initialize with Google Apps, and start service
 sudo pacman -S waydroid --noconfirm
 sudo waydroid init -s GAPPS -f
 sudo systemctl enable --now waydroid-container
 
-2. ARM TRANSLATION (FOR TFT PERFORMANCE)
+2. ARM TRANSLATION (LIBNDK FOR TFT)
 ------------------------------------------------------------
-# TFT is ARM-based; libndk is required for x86 CPUs (AMD/Intel)
+# Required for ARM-based games (like TFT) on x86_64 CPUs
 git clone https://github.com/casualsnek/waydroid_script.git
 cd waydroid_script
 python3 -m venv venv
 source venv/bin/activate
-# or 'source venv/bin/activate.fish' if use fish
 pip install -r requirements.txt
 sudo ./venv/bin/python3 main.py install libndk
 deactivate && cd ..
 
 3. GOOGLE PLAY STORE FIX (ANDROID ID)
 ------------------------------------------------------------
-# A. Start Waydroid once to generate the ID
+# 1. Start Waydroid session first
 waydroid session start &
-# or through the start menu
-
-# B. Get the Android ID (Run this after Waydroid has loaded)
-# This uses sqlite3 to bypass the "Binary file matches" error
+# 2. Get Android ID via sqlite3
 sudo waydroid shell -- sh -c "sqlite3 /data/data/com.google.android.gsf/databases/gservices.db 'select value from main where name = \"android_id\";'"
+# 3. Register the output number at: https://www.google.com/android/uncertified/
+# Wait ~20 minutes for Google to whitelist the ID.
 
-# C. Register: Copy the output number and paste it here:
-# https://www.google.com/android/uncertified/
-# NOTE: Wait ~20 mins for Google to whitelist the ID.
-
-4. TFT OPTIMIZATION (PC UI & FPS)
+4. TFT GRAPHICS & PERFORMANCE OPTIMIZATION
 ------------------------------------------------------------
-# A. Force Tablet/PC UI Layout (Run while Waydroid is active)
-waydroid shell wm size 1920x1085 # (why not 1920x1080 ???)
+# A. Force Tablet/PC UI Layout
+waydroid shell wm size 1920x1085
 
-# B. Unlock FPS (Run AFTER installing TFT and opening it once)
-# Path(example): ~/.local/share/waydroid/data/data/com.riotgames.league.teamfighttactics/no_backup/Config/Game.cfg
-# Command(correct): sudo waydroid shell -- vim /data_mirror/data_ce/null/0/com.riotgames.league.teamfighttacticsvn/no_backup/Config/Game.cfg
+# B. Maximize Android Media Volume
+# Option 1: Modern command (may fail on Arch-based distros)
+# waydroid shell cmd media_session volume --stream 3 --set 15
+# Option 2: Reliable workaround for CachyOS/Arch (proven working)
+sudo lxc-attach -P /var/lib/waydroid/lxc/ -n waydroid --clear-env -- cmd media_session volume --stream 3 --set 15
+
+# C. Fix "TV Interference" / Screen Flickering
+sudo waydroid prop set persist.waydroid.multi_windows true
+sudo waydroid prop set persist.waydroid.refresh_rate 60
+
+# D. Unlock FPS in TFT (Edit config file)
+# Path after running TFT once:
+# sudo waydroid shell -- vim /data_mirror/data_ce/null/0/com.riotgames.league.teamfighttacticsvn/no_backup/Config/Game.cfg
 # Set: WaitForVerticalSync=1 | FrameCapType=0
 
-5. STEAM GAME MODE INTEGRATION
+5. BLUETOOTH FIX (REDMI BUDS 6 PLAY)
+------------------------------------------------------------
+# Fixes immediate disconnect loops for certain Bluetooth devices
+sudo sed -i 's/#ClassicBondedOnly=true/ClassicBondedOnly=false/' /etc/bluetooth/input.conf
+sudo sed -i 's/#Experimental=false/Experimental=true/' /etc/bluetooth/main.conf
+sudo systemctl restart bluetooth
+# NOTE: Unpair and re-pair your buds after applying these changes.
+
+6. STEAM GAME MODE INTEGRATION
 ------------------------------------------------------------
 # 1. Add "Waydroid" as a Non-Steam Game in Desktop Mode.
-In CachyOS Handheld, just right click the icon in start menu
-and choose 'Add to Steam'.
-# 2. Launch Options: show-full-ui
-# 3. Controller: Use "Web Browser" template (Mouse/Touch support).
+#    In CachyOS: Right-click the Waydroid icon in the start menu and select 'Add to Steam'.
+# 2. Set Launch Options to: show-full-ui
+# 3. Recommended Controller Template: "Web Browser" (provides mouse/touch support).
 
-6. COMPLETELY REVERT / CLEANUP
+7. COMPLETE REMOVAL & CLEANUP
 ------------------------------------------------------------
 # Stop services and remove packages
 sudo systemctl disable --now waydroid-container
@@ -61,8 +72,7 @@ sudo pacman -Rns waydroid --noconfirm
 
 # Wipe all Android data and leftover configs
 sudo rm -rf /var/lib/waydroid
-rm -rf ~/.local/share/waydroid
-rm -rf ~/.share/waydroid
+rm -rf ~/.local/share/waydroid ~/.share/waydroid
 rm -rf ~/.local/share/applications/*waydroid*
 rm -rf ~/waydroid_script
 ============================================================
